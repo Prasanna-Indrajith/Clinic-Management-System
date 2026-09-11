@@ -71,7 +71,17 @@ const login = async (req, res) => {
   }
 };
 
+/**
+ * Return current authenticated user profile
+ */
+const getMe = async (req, res) => {
+  return res.status(200).json({
+    user: req.user,
+  });
+};
+
 module.exports = {
   register,
   login,
+  getMe,
 };
