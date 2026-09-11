@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run lint-staged on staged files
+npx lint-staged
+
+# Run tests related to staged files (bail fast on first failure)
+# Skip in CI — CI runs the full suite separately
+if [ -z "$CI" ]; then
+  npm test
+fi

@@ -21,7 +21,7 @@ export default function RegisterPage() {
   const formik = useFormik({
     initialValues: { name: '', email: '', password: '', confirmPassword: '' },
     validationSchema: schema,
-    onSubmit: async (values) => {
+    onSubmit: async (_values) => {
       setLoading(true);
       try {
         // TODO (Phase 1): replace with real API call

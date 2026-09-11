@@ -25,5 +25,7 @@ module.exports = {
     // Security: never use eval or Function constructors
     'no-eval': 'error',
     'no-new-func': 'error',
+    'no-process-exit': 'off',
+    'node/no-process-exit': 'off',
   },
 };
