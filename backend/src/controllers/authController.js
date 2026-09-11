@@ -2,6 +2,7 @@
 
 const { User } = require('../models');
 const logger = require('../config/logger');
+const { generateToken } = require('../utils/token');
 
 /**
  * Register a new user with bcrypt-hashed password
@@ -36,6 +37,41 @@ const register = async (req, res) => {
   }
 };
 
+/**
+ * Authenticate user, return signed JWT and stripped user profile
+ */
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Find user by email
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Verify password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Sign JWT token
+    const token = generateToken(user);
+    logger.info(`User logged in: ${user.email} (${user.role})`);
+
+    return res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: user.toJSON(),
+    });
+  } catch (err) {
+    logger.error('Login error', { message: err.message });
+    return res.status(500).json({ error: 'Internal server error during login' });
+  }
+};
+
 module.exports = {
   register,
+  login,
 };
