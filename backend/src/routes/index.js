@@ -10,5 +10,6 @@ router.use('/health', healthRouter);
 router.use('/auth', authRouter);
 router.use('/', authRouter); // Supports SRS /api/register and /api/login paths
 router.use('/patients', require('./patients'));
+router.use('/doctors', require('./doctors'));
 
 module.exports = router;
