@@ -3,6 +3,7 @@
 const { User } = require('../models');
 const logger = require('../config/logger');
 const { generateToken } = require('../utils/token');
+const audit = require('../utils/auditLog');
 
 /**
  * Register a new user with bcrypt-hashed password
@@ -25,6 +26,16 @@ const register = async (req, res) => {
       role: role || 'patient',
     });
 
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    await audit.log({
+      userId: user.user_id,
+      action: 'USER_REGISTERED',
+      entity: 'User',
+      entityId: user.user_id,
+      ipAddress,
+      details: { email: user.email, role: user.role },
+    });
+
     logger.info(`New user registered: ${user.email} (${user.role})`);
 
     return res.status(201).json({
@@ -41,23 +52,50 @@ const register = async (req, res) => {
  * Authenticate user, return signed JWT and stripped user profile
  */
 const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
+  const ipAddress = req.ip || req.socket.remoteAddress;
+  const { email, password } = req.body;
 
+  try {
     // Find user by email
     const user = await User.findOne({ where: { email } });
     if (!user) {
+      await audit.log({
+        userId: null,
+        action: 'LOGIN_FAILURE',
+        entity: 'User',
+        entityId: null,
+        ipAddress,
+        details: { email, reason: 'User not found' },
+      });
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     // Verify password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      await audit.log({
+        userId: user.user_id,
+        action: 'LOGIN_FAILURE',
+        entity: 'User',
+        entityId: user.user_id,
+        ipAddress,
+        details: { email, reason: 'Invalid password' },
+      });
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     // Sign JWT token
     const token = generateToken(user);
+
+    await audit.log({
+      userId: user.user_id,
+      action: 'LOGIN_SUCCESS',
+      entity: 'User',
+      entityId: user.user_id,
+      ipAddress,
+      details: { email: user.email },
+    });
+
     logger.info(`User logged in: ${user.email} (${user.role})`);
 
     return res.status(200).json({

@@ -1,26 +1,35 @@
 'use strict';
 
-/**
- * Audit logger stub — Phase 1 replaces this with a real DB write.
- *
- * Usage:
- *   const audit = require('../utils/auditLog');
- *   await audit.log({ userId, action: 'CREATE_PATIENT', entityId: patient.id });
- */
-
+const { AuditLog } = require('../models');
 const logger = require('../config/logger');
 
 /**
+ * Record an audit log entry in the database and Winston logger.
  * @param {object} entry
- * @param {string|number} entry.userId
- * @param {string} entry.action   - e.g. 'CREATE_PATIENT', 'UPDATE_APPOINTMENT'
- * @param {string} [entry.entity] - Table name affected
- * @param {string|number} [entry.entityId]
- * @param {string} [entry.status] - 'success' | 'failure'
- * @param {string} [entry.message]
+ * @param {number|null} [entry.userId]
+ * @param {string} entry.action
+ * @param {string} entry.entity
+ * @param {string|number|null} [entry.entityId]
+ * @param {string|null} [entry.ipAddress]
+ * @param {string|object|null} [entry.details]
  */
 const log = async (entry) => {
-  // TODO (Phase 1): INSERT into audit_logs table via Sequelize
+  try {
+    const detailsStr =
+      typeof entry.details === 'object' ? JSON.stringify(entry.details) : entry.details;
+
+    await AuditLog.create({
+      user_id: entry.userId || null,
+      action: entry.action,
+      entity: entry.entity,
+      entity_id: entry.entityId ? String(entry.entityId) : null,
+      ip_address: entry.ipAddress || null,
+      details: detailsStr || null,
+    });
+  } catch (err) {
+    logger.error('Failed to write audit log to database', { message: err.message, entry });
+  }
+
   logger.info('AUDIT', {
     timestamp: new Date().toISOString(),
     ...entry,
