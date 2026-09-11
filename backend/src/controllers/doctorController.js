@@ -1,28 +1,24 @@
 'use strict';
 
-const { Op } = require('sequelize');
 const { Doctor } = require('../models');
 const logger = require('../config/logger');
+
+const { buildSearchClause, getPagination } = require('../utils/search');
 
 /**
  * List doctors with pagination and search
  */
 const getAllDoctors = async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = getPagination(req.query);
     const search = req.query.search || req.query.q || '';
     const specialization = req.query.specialization;
 
     const whereClause = {};
 
-    if (search) {
-      whereClause[Op.or] = [
-        { name: { [Op.like]: `%${search}%` } },
-        { specialization: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } },
-      ];
+    const searchClause = buildSearchClause(search, ['name', 'specialization', 'email']);
+    if (searchClause) {
+      Object.assign(whereClause, searchClause);
     }
 
     if (specialization) {
