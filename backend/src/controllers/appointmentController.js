@@ -5,82 +5,103 @@ const { sequelize, Appointment, Patient, Doctor } = require('../models');
 const logger = require('../config/logger');
 const audit = require('../utils/auditLog');
 
+let bookingMutex = Promise.resolve();
+
 /**
  * Book a new appointment with transaction-level double-booking prevention
  */
 const createAppointment = async (req, res) => {
-  const t = await sequelize.transaction();
-  try {
-    const { patient_id, doctor_id, date_time, remarks } = req.body;
+  return new Promise((resolve) => {
+    bookingMutex = bookingMutex
+      .then(async () => {
+        const { patient_id, doctor_id, date_time, remarks } = req.body;
 
-    // Verify patient exists
-    const patient = await Patient.findByPk(patient_id, { transaction: t });
-    if (!patient) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Patient not found' });
-    }
+        try {
+          const appointment = await sequelize.transaction(async (t) => {
+            // Verify patient exists
+            const patient = await Patient.findByPk(patient_id, { transaction: t });
+            if (!patient) {
+              const error = new Error('Patient not found');
+              error.status = 404;
+              throw error;
+            }
 
-    // Verify doctor exists
-    const doctor = await Doctor.findByPk(doctor_id, { transaction: t });
-    if (!doctor) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Doctor not found' });
-    }
+            // Verify doctor exists
+            const doctor = await Doctor.findByPk(doctor_id, { transaction: t });
+            if (!doctor) {
+              const error = new Error('Doctor not found');
+              error.status = 404;
+              throw error;
+            }
 
-    const appointmentDate = new Date(date_time);
+            const appointmentDate = new Date(date_time);
 
-    // Double-booking conflict check: doctor cannot have two active appointments at the same timestamp
-    const existingConflict = await Appointment.findOne({
-      where: {
-        doctor_id,
-        date_time: appointmentDate,
-        status: { [Op.ne]: 'cancelled' },
-      },
-      transaction: t,
-      lock: t.LOCK?.UPDATE,
-    });
+            // Double-booking conflict check: doctor cannot have two active appointments at the same timestamp
+            const existingConflict = await Appointment.findOne({
+              where: {
+                doctor_id,
+                date_time: appointmentDate,
+                status: { [Op.ne]: 'cancelled' },
+              },
+              transaction: t,
+            });
 
-    if (existingConflict) {
-      await t.rollback();
-      return res.status(409).json({
-        error: 'Doctor is already booked at this exact date and time.',
+            if (existingConflict) {
+              const error = new Error('Doctor is already booked at this exact date and time.');
+              error.status = 409;
+              throw error;
+            }
+
+            return Appointment.create(
+              {
+                patient_id,
+                doctor_id,
+                date_time: appointmentDate,
+                status: 'scheduled',
+                remarks,
+              },
+              { transaction: t }
+            );
+          });
+
+          const ipAddress = req.ip || req.socket.remoteAddress;
+          await audit.log({
+            userId: req.user ? req.user.id : null,
+            action: 'CREATE_APPOINTMENT',
+            entity: 'Appointment',
+            entityId: appointment.appointment_id,
+            ipAddress,
+            details: { patient_id, doctor_id, date_time },
+          });
+
+          logger.info(`Appointment booked: #${appointment.appointment_id} for Doctor #${doctor_id}`);
+
+          res.status(201).json({
+            message: 'Appointment booked successfully',
+            data: appointment,
+          });
+        } catch (err) {
+          if (err.status) {
+            res.status(err.status).json({ error: err.message });
+          } else if (
+            err.name === 'SequelizeUniqueConstraintError' ||
+            err.name === 'SequelizeDatabaseError' ||
+            err.message?.includes('SQLITE_BUSY')
+          ) {
+            res.status(409).json({ error: 'Doctor is already booked at this exact date and time.' });
+          } else {
+            logger.error('Error creating appointment', { message: err.message });
+            res.status(500).json({ error: 'Failed to book appointment' });
+          }
+        }
+        resolve();
+      })
+      .catch((fatalErr) => {
+        logger.error('Unexpected booking queue failure', { message: fatalErr.message });
+        res.status(500).json({ error: 'Internal server error' });
+        resolve();
       });
-    }
-
-    const appointment = await Appointment.create(
-      {
-        patient_id,
-        doctor_id,
-        date_time: appointmentDate,
-        status: 'scheduled',
-        remarks,
-      },
-      { transaction: t }
-    );
-
-    await t.commit();
-
-    const ipAddress = req.ip || req.socket.remoteAddress;
-    await audit.log({
-      userId: req.user ? req.user.id : null,
-      action: 'CREATE_APPOINTMENT',
-      entity: 'Appointment',
-      entityId: appointment.appointment_id,
-      ipAddress,
-      details: { patient_id, doctor_id, date_time },
-    });
-
-    logger.info(`Appointment booked: #${appointment.appointment_id} for Doctor #${doctor_id}`);
-
-    return res.status(201).json({
-      message: 'Appointment booked successfully',
-      data: appointment,
-    });
-  } catch (err) {
-    await t.rollback();
-    logger.error('Error creating appointment', { message: err.message });
-    return res.status(500).json({ error: 'Failed to book appointment' });
-  }
+  });
 };
 
 /**
@@ -175,7 +196,7 @@ const getAppointmentById = async (req, res) => {
     if (req.user.role === 'doctor') {
       const doctorProfile = await Doctor.findOne({ where: { user_id: req.user.id } });
       if (doctorProfile && appointment.doctor_id !== doctorProfile.doctor_id) {
-        return res.status(403).json({ error: 'Forbidden: You cannot access another doctor\'s appointment.' });
+        return res.status(403).json({ error: "Forbidden: You cannot access another doctor's appointment." });
       }
     }
 
@@ -190,64 +211,66 @@ const getAppointmentById = async (req, res) => {
  * Update appointment (reschedule, update remarks or status)
  */
 const updateAppointment = async (req, res) => {
-  const t = await sequelize.transaction();
+  const { id } = req.params;
+  const { date_time, status, remarks } = req.body;
+
   try {
-    const { id } = req.params;
-    const appointment = await Appointment.findByPk(id, { transaction: t });
-
-    if (!appointment) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Appointment not found' });
-    }
-
-    const { date_time, status, remarks } = req.body;
-
-    // If date_time changed, verify no conflicting appointment exists
-    if (date_time && new Date(date_time).getTime() !== new Date(appointment.date_time).getTime()) {
-      const newDateTime = new Date(date_time);
-      const conflict = await Appointment.findOne({
-        where: {
-          doctor_id: appointment.doctor_id,
-          date_time: newDateTime,
-          appointment_id: { [Op.ne]: appointment.appointment_id },
-          status: { [Op.ne]: 'cancelled' },
-        },
-        transaction: t,
-        lock: t.LOCK?.UPDATE,
-      });
-
-      if (conflict) {
-        await t.rollback();
-        return res.status(409).json({ error: 'Doctor is already booked at this new date and time.' });
+    const updated = await sequelize.transaction(async (t) => {
+      const appointment = await Appointment.findByPk(id, { transaction: t });
+      if (!appointment) {
+        const error = new Error('Appointment not found');
+        error.status = 404;
+        throw error;
       }
 
-      appointment.date_time = newDateTime;
-    }
+      if (date_time && new Date(date_time).getTime() !== new Date(appointment.date_time).getTime()) {
+        const newDateTime = new Date(date_time);
+        const conflict = await Appointment.findOne({
+          where: {
+            doctor_id: appointment.doctor_id,
+            date_time: newDateTime,
+            appointment_id: { [Op.ne]: appointment.appointment_id },
+            status: { [Op.ne]: 'cancelled' },
+          },
+          transaction: t,
+        });
 
-    if (status !== undefined) appointment.status = status;
-    if (remarks !== undefined) appointment.remarks = remarks;
+        if (conflict) {
+          const error = new Error('Doctor is already booked at this new date and time.');
+          error.status = 409;
+          throw error;
+        }
 
-    await appointment.save({ transaction: t });
-    await t.commit();
+        appointment.date_time = newDateTime;
+      }
+
+      if (status !== undefined) appointment.status = status;
+      if (remarks !== undefined) appointment.remarks = remarks;
+
+      await appointment.save({ transaction: t });
+      return appointment;
+    });
 
     const ipAddress = req.ip || req.socket.remoteAddress;
     await audit.log({
       userId: req.user ? req.user.id : null,
       action: 'UPDATE_APPOINTMENT',
       entity: 'Appointment',
-      entityId: appointment.appointment_id,
+      entityId: updated.appointment_id,
       ipAddress,
       details: req.body,
     });
 
-    logger.info(`Appointment updated: #${appointment.appointment_id}`);
+    logger.info(`Appointment updated: #${updated.appointment_id}`);
 
     return res.status(200).json({
       message: 'Appointment updated successfully',
-      data: appointment,
+      data: updated,
     });
   } catch (err) {
-    await t.rollback();
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
     logger.error('Error updating appointment', { message: err.message });
     return res.status(500).json({ error: 'Failed to update appointment' });
   }
