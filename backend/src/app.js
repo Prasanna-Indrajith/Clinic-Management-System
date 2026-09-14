@@ -49,7 +49,7 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// ── Swagger / OpenAPI docs ────────────────────────────────────────────────────
+const path = require('path');
 const swaggerSpec = swaggerJsdoc({
   definition: {
     openapi: '3.0.0',
@@ -70,7 +70,7 @@ const swaggerSpec = swaggerJsdoc({
     },
     security: [{ bearerAuth: [] }],
   },
-  apis: ['./src/routes/*.js'],
+  apis: [path.join(__dirname, 'routes/*.js')],
 });
 
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
