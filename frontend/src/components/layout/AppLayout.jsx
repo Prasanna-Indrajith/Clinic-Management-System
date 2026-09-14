@@ -5,11 +5,21 @@ import styles from './AppLayout.module.css';
 
 const NAV_ITEMS = [
   { to: '/dashboard',    label: 'Dashboard',     icon: '⬛' },
-  { to: '/patients',     label: 'Patients',      icon: '👤' },
-  { to: '/doctors',      label: 'Doctors',       icon: '🩺' },
+  { to: '/patients',     label: 'Patients',      icon: '👤', roles: ['admin', 'doctor', 'receptionist'] },
+  { to: '/doctors',      label: 'Doctors',       icon: '🩺', roles: ['admin', 'doctor', 'receptionist'] },
   { to: '/appointments', label: 'Appointments',  icon: '📅' },
-  { to: '/reports',      label: 'Reports',       icon: '📊' },
+  { to: '/reports',      label: 'Reports',       icon: '📊', roles: ['admin', 'doctor'] },
+  { to: '/admin',        label: 'Admin',         icon: '⚙️', roles: ['admin'] },
 ];
+
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return parts[0].slice(0, 2).toUpperCase();
+}
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
@@ -21,6 +31,10 @@ export default function AppLayout() {
     navigate('/login');
   };
 
+  const visibleNavItems = NAV_ITEMS.filter(
+    (item) => !item.roles || (user?.role && item.roles.includes(user.role))
+  );
+
   return (
     <div className={styles.shell}>
       {/* Sidebar */}
@@ -31,7 +45,7 @@ export default function AppLayout() {
         </div>
 
         <nav className={styles.nav}>
-          {NAV_ITEMS.map(({ to, label, icon }) => (
+          {visibleNavItems.map(({ to, label, icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -48,7 +62,7 @@ export default function AppLayout() {
         <div className={styles.sidebarFooter}>
           <div className={styles.userInfo}>
             <div className={styles.userAvatar}>
-              {user?.name?.[0]?.toUpperCase() ?? '?'}
+              {getInitials(user?.name)}
             </div>
             <div>
               <p className={styles.userName}>{user?.name ?? 'User'}</p>
