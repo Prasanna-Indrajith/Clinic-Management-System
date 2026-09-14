@@ -1,11 +1,13 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import ForbiddenPage from '../../pages/ForbiddenPage';
 
 /**
- * ProtectedRoute — redirects unauthenticated users to /login.
+ * ProtectedRoute — guards routes based on authentication status and allowed roles.
+ * Redirects unauthenticated users to /login and renders ForbiddenPage for unauthorized roles.
  */
-export default function ProtectedRoute() {
-  const { isAuthenticated, isAuthReady } = useAuth();
+export default function ProtectedRoute({ allowedRoles }) {
+  const { user, isAuthenticated, isAuthReady } = useAuth();
   const location = useLocation();
 
   if (!isAuthReady) {
@@ -18,6 +20,10 @@ export default function ProtectedRoute() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (allowedRoles && (!user?.role || !allowedRoles.includes(user.role))) {
+    return <ForbiddenPage allowedRoles={allowedRoles} />;
   }
 
   return <Outlet />;

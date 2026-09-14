@@ -11,6 +11,7 @@ import PatientsPage from './pages/PatientsPage';
 import DoctorsPage from './pages/DoctorsPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import ReportsPage from './pages/ReportsPage';
+import AdminPage from './pages/AdminPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 export default function App() {
@@ -29,7 +30,17 @@ export default function App() {
             <Route path="/patients" element={<PatientsPage />} />
             <Route path="/doctors" element={<DoctorsPage />} />
             <Route path="/appointments" element={<AppointmentsPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
+
+            {/* Reports — Admin and Doctor only */}
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'doctor']} />}>
+              <Route path="/reports" element={<ReportsPage />} />
+            </Route>
+
+            {/* Admin only routes */}
+            <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin/users" element={<AdminPage />} />
+            </Route>
           </Route>
         </Route>
 
