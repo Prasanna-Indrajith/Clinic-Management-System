@@ -41,7 +41,11 @@ api.interceptors.response.use(
 export default api;
 
 // Convenience exports
-export const authApi       = { /* populated in Phase 1 */ };
+export const authApi = {
+  login: (credentials) => api.post('/auth/login', credentials),
+  register: (userData) => api.post('/auth/register', userData),
+  getMe: () => api.get('/auth/me'),
+};
 export const patientsApi   = { /* populated in Phase 2/4 */ };
 export const appointApi    = { /* populated in Phase 2/4 */ };
 export const reportsApi    = { /* populated in Phase 5 */ };

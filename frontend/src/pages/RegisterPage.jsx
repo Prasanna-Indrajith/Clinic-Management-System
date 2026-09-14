@@ -3,11 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import toast from 'react-hot-toast';
+import { authApi } from '../api/client';
 import styles from './AuthPage.module.css';
 
 const schema = Yup.object({
   name:            Yup.string().min(2, 'At least 2 characters').required('Full name is required'),
   email:           Yup.string().email('Enter a valid email').required('Email is required'),
+  role:            Yup.string().oneOf(['admin', 'doctor', 'receptionist', 'patient']).required('Role is required'),
   password:        Yup.string().min(8, 'Minimum 8 characters').required('Password is required'),
   confirmPassword: Yup.string()
     .oneOf([Yup.ref('password')], 'Passwords do not match')
@@ -19,18 +21,25 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
 
   const formik = useFormik({
-    initialValues: { name: '', email: '', password: '', confirmPassword: '' },
+    initialValues: { name: '', email: '', role: 'receptionist', password: '', confirmPassword: '' },
     validationSchema: schema,
-    onSubmit: async (_values) => {
+    onSubmit: async (values) => {
       setLoading(true);
       try {
-        // TODO (Phase 1): replace with real API call
-        // await api.post('/auth/register', { name: values.name, email: values.email, password: values.password });
-        await new Promise((r) => setTimeout(r, 800));
-        toast.success('Account created — please sign in');
+        await authApi.register({
+          name: values.name,
+          email: values.email,
+          password: values.password,
+          role: values.role,
+        });
+        toast.success('Account created successfully — please sign in');
         navigate('/login');
       } catch (err) {
-        const msg = err?.response?.data?.error ?? 'Registration failed. Please try again.';
+        const msg =
+          err?.response?.data?.error ||
+          err?.response?.data?.details?.[0]?.message ||
+          err?.message ||
+          'Registration failed. Please try again.';
         toast.error(msg);
       } finally {
         setLoading(false);
@@ -73,6 +82,24 @@ export default function RegisterPage() {
         <form onSubmit={formik.handleSubmit} noValidate className={styles.form}>
           {field('name',            'Full name',         'text',     'Dr. Jane Smith')}
           {field('email',           'Email address',     'email',    'you@clinic.com')}
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="role">Role</label>
+            <select
+              id="role"
+              className={`form-input ${formik.touched.role && formik.errors.role ? 'error' : ''}`}
+              {...formik.getFieldProps('role')}
+            >
+              <option value="receptionist">Receptionist</option>
+              <option value="doctor">Doctor</option>
+              <option value="admin">Clinic Admin</option>
+              <option value="patient">Patient</option>
+            </select>
+            {formik.touched.role && formik.errors.role && (
+              <span className="form-error" role="alert">{formik.errors.role}</span>
+            )}
+          </div>
+
           {field('password',        'Password',          'password', '••••••••')}
           {field('confirmPassword', 'Confirm password',  'password', '••••••••')}
 

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import { authApi } from '../api/client';
 import styles from './AuthPage.module.css';
 
 const schema = Yup.object({
@@ -14,6 +15,7 @@ const schema = Yup.object({
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
 
   const formik = useFormik({
@@ -22,18 +24,25 @@ export default function LoginPage() {
     onSubmit: async (values) => {
       setLoading(true);
       try {
-        // TODO (Phase 1): replace with real API call
-        // const { data } = await api.post('/auth/login', values);
-        // login(data.user, data.token);
-
-        // Phase 0 placeholder — simulates a successful login
-        await new Promise((r) => setTimeout(r, 800));
-        login({ id: 1, name: 'Demo Admin', email: values.email, role: 'admin' }, 'demo-token');
-        toast.success('Welcome back!');
-        navigate('/dashboard');
+        const { data } = await authApi.login({
+          email: values.email,
+          password: values.password,
+        });
+        const userObj = {
+          id: data.user?.user_id || data.user?.id,
+          name: data.user?.name,
+          email: data.user?.email,
+          role: data.user?.role,
+        };
+        login(userObj, data.token);
+        toast.success(`Welcome back, ${userObj.name || 'User'}!`);
+        const destination = location.state?.from?.pathname || '/dashboard';
+        navigate(destination, { replace: true });
       } catch (err) {
-        // Never display raw error messages from the server to avoid leaking info
-        const msg = err?.response?.data?.error ?? 'Login failed. Check your credentials.';
+        const msg =
+          err?.response?.data?.error ||
+          err?.message ||
+          'Login failed. Check your credentials.';
         toast.error(msg);
       } finally {
         setLoading(false);
