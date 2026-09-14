@@ -1,30 +1,57 @@
-import { createContext, useContext, useState, useCallback } from 'react';
-
-/**
- * AuthContext — Phase 0 stub.
- * Phase 1 will replace setToken/clearToken with real JWT logic,
- * and user/token will be loaded from httpOnly cookie or memory store.
- */
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { authStore } from '../api/authStore';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);    // { id, name, email, role }
-  const [token, setToken] = useState(null);  // JWT string — stored in memory, not localStorage
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = sessionStorage.getItem('cm_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [token, setToken] = useState(() => authStore.getToken());
+  const isAuthReady = true;
+
+  const logout = useCallback(() => {
+    authStore.clearToken();
+    setUser(null);
+    setToken(null);
+  }, []);
 
   const login = useCallback((userData, jwt) => {
+    authStore.setToken(jwt);
+    try {
+      sessionStorage.setItem('cm_user', JSON.stringify(userData));
+    } catch {
+      // ignore storage errors
+    }
     setUser(userData);
     setToken(jwt);
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    setToken(null);
-    // TODO (Phase 1): also call POST /api/auth/logout to revoke refresh token
-  }, []);
+  useEffect(() => {
+    // Subscribe to automatic 401 logout from Axios interceptors
+    const unsubscribe = authStore.onUnauthorized(() => {
+      logout();
+    });
+
+    return () => unsubscribe();
+  }, [logout]);
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        login,
+        logout,
+        isAuthenticated: !!user && !!token,
+        isAuthReady,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
