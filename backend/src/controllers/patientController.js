@@ -109,6 +109,8 @@ const getPatientById = async (req, res) => {
   }
 };
 
+const audit = require('../utils/auditLog');
+
 /**
  * Create new patient record (Admin only)
  */
@@ -122,6 +124,16 @@ const createPatient = async (req, res) => {
       contact,
       address,
       notes,
+    });
+
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    await audit.log({
+      userId: req.user ? req.user.id : null,
+      action: 'CREATE_PATIENT',
+      entity: 'Patient',
+      entityId: patient.patient_id,
+      ipAddress,
+      details: { name: patient.name, contact: patient.contact },
     });
 
     logger.info(`Patient created: ${patient.name} (ID: ${patient.patient_id})`);
@@ -157,6 +169,16 @@ const updatePatient = async (req, res) => {
       ...(notes !== undefined && { notes }),
     });
 
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    await audit.log({
+      userId: req.user ? req.user.id : null,
+      action: 'UPDATE_PATIENT',
+      entity: 'Patient',
+      entityId: patient.patient_id,
+      ipAddress,
+      details: req.body,
+    });
+
     logger.info(`Patient updated: ${patient.patient_id}`);
 
     return res.status(200).json({
@@ -182,6 +204,17 @@ const deletePatient = async (req, res) => {
     }
 
     await patient.destroy();
+
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    await audit.log({
+      userId: req.user ? req.user.id : null,
+      action: 'DELETE_PATIENT',
+      entity: 'Patient',
+      entityId: id,
+      ipAddress,
+      details: { patient_id: id },
+    });
+
     logger.info(`Patient deleted: ${id}`);
 
     return res.status(200).json({

@@ -3,6 +3,7 @@
 const { Op } = require('sequelize');
 const { sequelize, Appointment, Patient, Doctor } = require('../models');
 const logger = require('../config/logger');
+const audit = require('../utils/auditLog');
 
 /**
  * Book a new appointment with transaction-level double-booking prevention
@@ -58,6 +59,17 @@ const createAppointment = async (req, res) => {
     );
 
     await t.commit();
+
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    await audit.log({
+      userId: req.user ? req.user.id : null,
+      action: 'CREATE_APPOINTMENT',
+      entity: 'Appointment',
+      entityId: appointment.appointment_id,
+      ipAddress,
+      details: { patient_id, doctor_id, date_time },
+    });
+
     logger.info(`Appointment booked: #${appointment.appointment_id} for Doctor #${doctor_id}`);
 
     return res.status(201).json({
@@ -218,6 +230,16 @@ const updateAppointment = async (req, res) => {
     await appointment.save({ transaction: t });
     await t.commit();
 
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    await audit.log({
+      userId: req.user ? req.user.id : null,
+      action: 'UPDATE_APPOINTMENT',
+      entity: 'Appointment',
+      entityId: appointment.appointment_id,
+      ipAddress,
+      details: req.body,
+    });
+
     logger.info(`Appointment updated: #${appointment.appointment_id}`);
 
     return res.status(200).json({
@@ -245,6 +267,16 @@ const cancelAppointment = async (req, res) => {
 
     appointment.status = 'cancelled';
     await appointment.save();
+
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    await audit.log({
+      userId: req.user ? req.user.id : null,
+      action: 'CANCEL_APPOINTMENT',
+      entity: 'Appointment',
+      entityId: id,
+      ipAddress,
+      details: { status: 'cancelled' },
+    });
 
     logger.info(`Appointment cancelled: #${id}`);
 
