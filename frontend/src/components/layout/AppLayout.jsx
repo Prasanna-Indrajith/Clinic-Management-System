@@ -6,6 +6,7 @@ import styles from './AppLayout.module.css';
 const NAV_ITEMS = [
   { to: '/dashboard',    label: 'Dashboard',     icon: '⬛' },
   { to: '/patients',     label: 'Patients',      icon: '👤' },
+  { to: '/doctors',      label: 'Doctors',       icon: '🩺' },
   { to: '/appointments', label: 'Appointments',  icon: '📅' },
   { to: '/reports',      label: 'Reports',       icon: '📊' },
 ];
