@@ -9,7 +9,14 @@ const PORT = parseInt(process.env.PORT, 10) || 5000;
 
 const server = http.createServer(app);
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
+  try {
+    const db = require('./models');
+    await db.sequelize.sync({ force: false });
+    logger.info('Database synced successfully');
+  } catch (err) {
+    logger.error('Database sync failed', { message: err.message });
+  }
   logger.info(`Server running on http://localhost:${PORT}`);
   logger.info(`Swagger docs at http://localhost:${PORT}/api/docs`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
