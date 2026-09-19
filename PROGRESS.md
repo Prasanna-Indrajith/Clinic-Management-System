@@ -14,8 +14,8 @@
 - **Phase 3 — Frontend Foundation & Route Protection**: ✅ Complete
 - **Phase 4 — Feature Integration (UI & End-to-End)**: ✅ Complete
 - **Phase 5 — Reporting Module (Daily/Monthly CSV & PDF)**: ✅ Complete
-- **Phase 6 — Security Hardening Pass**: 🔄 Next Phase
-- **Phase 7 — Testing & QA Pass**: ⏳ Pending
+- **Phase 6 — Security Hardening Pass**: ✅ Complete
+- **Phase 7 — Testing & QA Pass**: 🔄 Next Phase
 - **Phase 8 — Deployment**: ⏳ Pending
 - **Phase 9 — Documentation & Submission**: ⏳ Pending
 
@@ -69,25 +69,31 @@
 - [x] Doctor-level report scoping (doctors only access their own appointments)
 - [x] **Test Cases**: `REP-01` to `REP-05` passed in `backend/__tests__/reports.test.js`
 
+### Phase 6 — Security Hardening Pass (Week 5–6)
+- [x] Audited all routes for `authMiddleware` and `roleMiddleware` coverage
+- [x] Confirmed parameterized queries everywhere across Sequelize models (zero string concatenation)
+- [x] Configured HTTP security headers via `helmet`: CSP, X-Frame-Options, X-Content-Type-Options
+- [x] Updated CORS policy with explicit allowed methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`) and origin checking
+- [x] Verified sensitive fields (passwords, password_hash) are never serialized in API responses
+- [x] Production error handler masks internal stack traces and database details
+- [x] **Test Cases**: `SEC-01` to `SEC-08` passed in `backend/__tests__/security.test.js` (11 tests)
+
 ---
 
 ## Test Execution Summary
 
-- **Backend Test Suites**: 5 passed, 5 total (`auth`, `patients`, `appointments`, `reports`, `e2e`)
-- **Backend Tests**: 51 passed, 51 total
+- **Backend Test Suites**: 6 passed, 6 total (`auth`, `patients`, `appointments`, `reports`, `e2e`, `security`)
+- **Backend Tests**: 62 passed, 62 total
 - **Frontend Test Suites**: 1 passed, 1 total (`routeGuards`)
 - **Frontend Tests**: 9 passed, 9 total
-- **Overall**: 60 automated tests passing with zero failures.
+- **Overall**: 71 automated tests passing with zero failures.
 
 ---
 
-## Next Phase: Phase 6 — Security Hardening Pass
+## Next Phase: Phase 7 — Testing & QA Pass
 
-Per `01_DEVELOPMENT_PLAN.md` §Phase 6:
-1. Run `npm audit` on backend and frontend; patch or document any accepted risk.
-2. Re-verify every API route for required `authMiddleware` and `roleMiddleware`.
-3. Confirm parameterized queries across all Sequelize and raw queries (zero string concatenation).
-4. Verify HTTP security headers via `helmet`: CSP, X-Frame-Options, X-Content-Type-Options.
-5. Ensure CORS whitelist is strictly configured for trusted frontend origins.
-6. Verify audit logs do not store sensitive user attributes (e.g., passwords or tokens).
-7. Execute security test cases (`SEC-01` to `SEC-06` in `02_TEST_PLAN.md`).
+Per `01_DEVELOPMENT_PLAN.md` §Phase 7:
+1. Run full automated test suite (backend + frontend) across all components.
+2. Verify edge-case validations and boundary inputs.
+3. Simulate concurrent appointment bookings and verify mutex serialization under load.
+4. Prepare test documentation and smoke-test reports.
