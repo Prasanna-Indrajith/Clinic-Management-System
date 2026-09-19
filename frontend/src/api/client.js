@@ -42,12 +42,52 @@ api.interceptors.response.use(
 
 export default api;
 
-// Convenience exports
+// ── Convenience exports ────────────────────────────────────────────────────
+
 export const authApi = {
   login: (credentials) => api.post('/auth/login', credentials),
   register: (userData) => api.post('/auth/register', userData),
   getMe: () => api.get('/auth/me'),
 };
-export const patientsApi   = { /* populated in Phase 2/4 */ };
-export const appointApi    = { /* populated in Phase 2/4 */ };
-export const reportsApi    = { /* populated in Phase 5 */ };
+
+export const patientsApi = {
+  list: (params = {}) => api.get('/patients', { params }),
+  get: (id) => api.get(`/patients/${id}`),
+  create: (data) => api.post('/patients', data),
+  update: (id, data) => api.put(`/patients/${id}`, data),
+  delete: (id) => api.delete(`/patients/${id}`),
+};
+
+export const doctorsApi = {
+  list: (params = {}) => api.get('/doctors', { params }),
+  get: (id) => api.get(`/doctors/${id}`),
+};
+
+export const appointApi = {
+  list: (params = {}) => api.get('/appointments', { params }),
+  get: (id) => api.get(`/appointments/${id}`),
+  create: (data) => api.post('/appointments', data),
+  update: (id, data) => api.put(`/appointments/${id}`, data),
+  cancel: (id) => api.patch(`/appointments/${id}/cancel`),
+};
+
+export const reportsApi = {
+  daily: (params) => api.post('/reports/daily', params),
+  monthly: (params) => api.post('/reports/monthly', params),
+};
+
+export const usersApi = {
+  list: (params = {}) => api.get('/users', { params }),
+  updateRole: (id, role) => api.put(`/users/${id}`, { role }),
+  delete: (id) => api.delete(`/users/${id}`),
+};
+
+export const medicalRecordsApi = {
+  list: (patientId) => api.get(`/medical-records/${patientId}`),
+  create: (patientId, data) => api.post(`/medical-records/${patientId}`, data),
+};
+
+// Notifications stub — interface ready for future SMS/email integration (Phase 4)
+export const notificationsApi = {
+  sendReminder: (appointmentId) => api.post(`/notifications/reminder/${appointmentId}`),
+};
