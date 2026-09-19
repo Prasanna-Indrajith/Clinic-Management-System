@@ -12,5 +12,8 @@ router.use('/', authRouter); // Supports SRS /api/register and /api/login paths
 router.use('/patients', require('./patients'));
 router.use('/doctors', require('./doctors'));
 router.use('/appointments', require('./appointments'));
+router.use('/users', require('./users'));
+router.use('/medical-records', require('./medicalRecords'));
+router.use('/reports', require('./reports'));
 
 module.exports = router;
