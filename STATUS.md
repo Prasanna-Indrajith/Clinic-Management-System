@@ -1,7 +1,7 @@
 # System Status & Quick-Start Guide
 
 > Project: Clinic Appointment & Patient Tracker  
-> Version: v0.5.0 (Phase 5 complete)
+> Version: v1.0.0 (PostgreSQL & Podman production-ready release)
 
 ---
 
@@ -9,9 +9,10 @@
 
 | Service | Technology | Port | URL |
 |---|---|---|---|
+| **Frontend Web App** | React 19 / Vite / Nginx | 5173 (dev) / 80 (container) | `http://localhost:5173` |
 | **Backend API** | Node.js / Express | 5000 | `http://localhost:5000` |
 | **API Documentation** | Swagger UI (OpenAPI 3.0) | 5000 | `http://localhost:5000/api/docs` |
-| **Frontend Application** | React 19 / Vite | 5173 | `http://localhost:5173` |
+| **PostgreSQL Database** | PostgreSQL 16 | 5432 | `localhost:5432` |
 
 ---
 
@@ -74,10 +75,10 @@ To access the system in local development:
 
 ### Run All Automated Tests
 ```bash
-# Backend unit & integration test suites (51 tests)
+# Backend test suites (auth, patients, appointments, reports, e2e, security) - 62 tests
 npm test
 
-# Frontend route guard tests (9 tests)
+# Frontend Vitest suites (route guards, ui components) - 17 tests
 npm --prefix frontend test -- --run
 ```
 
@@ -90,11 +91,13 @@ npm --prefix backend run lint
 npm --prefix frontend run lint
 ```
 
-### Start Development Servers
+### Run Locally with Podman / Docker
 ```bash
-# Backend server (port 5000)
-npm --prefix backend run dev
+# Using Podman Compose
+podman compose up --build
+# or
+podman-compose up --build
 
-# Frontend dev server (port 5173)
-npm --prefix frontend run dev
+# Using Docker Compose
+docker compose up --build
 ```

@@ -6,8 +6,9 @@ A full-stack, secure, production-ready clinical operations platform for managing
 
 ## 1. System Architecture & Tech Stack
 
-- **Backend**: Node.js (v20+), Express 4, Sequelize ORM (MySQL in production / SQLite in memory for unit testing)
+- **Backend**: Node.js (v20+), Express 4, Sequelize ORM (PostgreSQL in production / SQLite in memory for unit testing)
 - **Frontend**: React 19, Vite, React Router v6, Axios, React Hot Toast, Lucide Icons
+- **Database**: PostgreSQL 16 (with relational constraints, index-backed foreign keys, and connection pooling)
 - **Security & Hardening**:
   - JWT Authentication (Bearer tokens stored in memory & `sessionStorage`)
   - Role-Based Access Control (RBAC) with 4 roles: `admin`, `doctor`, `receptionist`, `patient`
@@ -16,7 +17,7 @@ A full-stack, secure, production-ready clinical operations platform for managing
   - Password hashing with `bcrypt` (10 salt rounds)
   - Parameterized ORM queries preventing SQL injection
   - In-memory Promise-queue Mutex (`bookingMutex`) preventing concurrent double-booking
-- **Containerization & Deployment**: Multi-stage Docker, Nginx reverse-proxy and SPA server, Docker Compose orchestration
+- **Containerization & Deployment**: Podman / Docker support, Multi-stage builds, Nginx reverse-proxy and SPA server, Podman Compose / Docker Compose orchestration
 
 ---
 
@@ -24,10 +25,10 @@ A full-stack, secure, production-ready clinical operations platform for managing
 
 | Service | Port | Description |
 |---|---|---|
-| **Frontend Web App** | `5173` (dev) / `80` (Docker) | Patient portal, doctor dashboard, admin management |
+| **Frontend Web App** | `5173` (dev) / `80` (Container) | Patient portal, doctor dashboard, admin management |
 | **Backend REST API** | `5000` | Core clinical APIs and auth endpoints |
 | **Swagger API Docs** | `5000` (`/api/docs`) | Interactive OpenAPI 3.0 specification |
-| **MySQL Database** | `3306` | Relational persistence with foreign-key constraints |
+| **PostgreSQL Database** | `5432` | Relational persistence with foreign-key constraints |
 
 ---
 
@@ -36,7 +37,7 @@ A full-stack, secure, production-ready clinical operations platform for managing
 ### Prerequisites
 - Node.js (v20 or higher)
 - npm (v9 or higher)
-- MySQL 8.0 (optional for dev; SQLite runs automatically for tests)
+- PostgreSQL 16 (optional for dev; SQLite runs automatically for tests)
 
 ### 1. Clone & Configure Environment
 ```bash
@@ -69,15 +70,25 @@ Visit `http://localhost:5173` to access the application.
 
 ---
 
-## 4. Docker Deployment (One-Command Setup)
+## 4. Podman / Docker Deployment (One-Command Setup)
 
-To spin up the entire application stack (MySQL database, Node.js backend, and Nginx frontend):
+To spin up the entire application stack (PostgreSQL database, Node.js backend, and Nginx frontend) using **Podman** (recommended for rootless Linux containers) or **Docker**:
 
+### Using Podman Compose:
 ```bash
-docker-compose up --build
+# Using podman compose
+podman compose up --build
+
+# Or using podman-compose
+podman-compose up --build
 ```
 
-The database initializes automatically, seeds schema tables via Sequelize sync, and establishes networking between containers.
+### Using Docker Compose (if Docker is used):
+```bash
+docker compose up --build
+```
+
+The PostgreSQL database initializes automatically, seeds schema tables via Sequelize sync, and establishes networking between containers.
 - Access the web interface at `http://localhost`
 - Access the API documentation at `http://localhost/api/docs` or `http://localhost:5000/api/docs`
 
