@@ -73,7 +73,7 @@ To access the system in local development:
 
 ## 4. How to Run & Verify
 
-### Run All Automated Tests
+### Run Automated Tests (Zero-Config in-memory SQLite)
 ```bash
 # Backend test suites (auth, patients, appointments, reports, e2e, security) - 62 tests
 npm test
@@ -82,22 +82,28 @@ npm test
 npm --prefix frontend test -- --run
 ```
 
-### Run Linters
+### Dev Testing with Live Hot-Reloading (Recommended)
 ```bash
-# Backend linter
-npm --prefix backend run lint
+# 1. Start PostgreSQL via Podman in the background
+npm run db:up
 
-# Frontend linter
-npm --prefix frontend run lint
+# 2. Seed demo users, doctors, patients, and appointments
+npm run db:seed
+
+# 3. Launch live hot-reloading dev servers (Backend: 5000, Frontend: 5173)
+npm run dev
+
+# 4. Tear down database when done
+npm run db:down
 ```
 
-### Run Locally with Podman / Docker
+### Full-Stack Dev Testing in Containers (Podman Compose with Live Volume Reload)
 ```bash
-# Using Podman Compose
-podman compose up --build
-# or
-podman-compose up --build
+npm run dev:podman
+# or: podman compose -f docker-compose.dev.yml up --build
+```
 
-# Using Docker Compose
-docker compose up --build
+### Production Deployment Testing (Static bundle & production backend)
+```bash
+podman compose up --build
 ```

@@ -70,22 +70,40 @@ Visit `http://localhost:5173` to access the application.
 
 ---
 
-## 4. Podman / Docker Deployment (One-Command Setup)
+## 4. Dev Testing & Deployment Modes
 
-To spin up the entire application stack (PostgreSQL database, Node.js backend, and Nginx frontend) using **Podman** (recommended for rootless Linux containers) or **Docker**:
+### Mode A: Hybrid Local Dev Testing (Fastest & Easiest for Development)
+Run PostgreSQL in a Podman container while running the backend (Nodemon) and frontend (Vite HMR) directly on your host machine with immediate code reload:
 
-### Using Podman Compose:
 ```bash
-# Using podman compose
-podman compose up --build
+# 1. Start PostgreSQL 16 container in the background
+npm run db:up
 
-# Or using podman-compose
-podman-compose up --build
+# 2. Seed realistic demo data (admin, doctors, patients, appointments)
+npm run db:seed
+
+# 3. Start backend (:5000) and frontend (:5173) with live hot-reloading
+npm run dev
+
+# 4. Stop PostgreSQL container when finished
+npm run db:down
 ```
 
-### Using Docker Compose (if Docker is used):
+### Mode B: Full-Container Dev Testing with Live Volume Mounts
+Run all 3 services in Podman containers with live host volume mounts (changes to `backend/` or `frontend/` instantly reload inside the containers):
+
 ```bash
-docker compose up --build
+# Start full dev stack with Nodemon & Vite HMR
+npm run dev:podman
+# (or: podman compose -f docker-compose.dev.yml up --build)
+```
+
+### Mode C: Production Deployment Simulation
+Spins up production containers (multi-stage production builds, Nginx reverse proxy serving static bundle, production backend):
+
+```bash
+podman compose up --build
+# (or: podman-compose up --build)
 ```
 
 The PostgreSQL database initializes automatically, seeds schema tables via Sequelize sync, and establishes networking between containers.
