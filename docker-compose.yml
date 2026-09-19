@@ -1,0 +1,71 @@
+services:
+  # MySQL Database Service
+  db:
+    image: mysql:8.0
+    container_name: clinic_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_changeme
+      MYSQL_DATABASE: clinic_tracker
+      MYSQL_USER: clinic_user
+      MYSQL_PASSWORD: changeme
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "clinic_user", "-pchangeme"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - clinic_net
+
+  # Backend REST API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: clinic_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: clinic_tracker
+      DB_USER: clinic_user
+      DB_PASS: changeme
+      JWT_SECRET: replace_with_a_long_random_secret_at_least_64_chars_for_prod
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      CORS_ORIGINS: http://localhost,http://localhost:80,http://localhost:5173,http://frontend
+    ports:
+      - "5000:5000"
+    networks:
+      - clinic_net
+
+  # Frontend Web UI (Nginx SPA + Reverse Proxy)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: clinic_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - clinic_net
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  clinic_net:
+    driver: bridge

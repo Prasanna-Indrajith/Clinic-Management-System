@@ -1,0 +1,53 @@
+services:
+  # Backend API Web Service
+  - type: web
+    name: clinic-tracker-backend
+    env: node
+    plan: free
+    buildCommand: cd backend && npm install && npm run build || true
+    startCommand: cd backend && node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DB_HOST
+        fromDatabase:
+          name: clinic-tracker-mysql
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: clinic-tracker-mysql
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: clinic-tracker-mysql
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: clinic-tracker-mysql
+          property: user
+      - key: DB_PASS
+        fromDatabase:
+          name: clinic-tracker-mysql
+          property: password
+
+  # Frontend Static Site
+  - type: web
+    name: clinic-tracker-frontend
+    env: static
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: clinic-tracker-mysql
+    plan: free
+    databaseName: clinic_tracker
+    user: clinic_user
