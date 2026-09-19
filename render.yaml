@@ -11,27 +11,29 @@ services:
         value: production
       - key: PORT
         value: 5000
+      - key: DB_DIALECT
+        value: postgres
       - key: JWT_SECRET
         generateValue: true
       - key: DB_HOST
         fromDatabase:
-          name: clinic-tracker-mysql
+          name: clinic-tracker-postgres
           property: host
       - key: DB_PORT
         fromDatabase:
-          name: clinic-tracker-mysql
+          name: clinic-tracker-postgres
           property: port
       - key: DB_NAME
         fromDatabase:
-          name: clinic-tracker-mysql
+          name: clinic-tracker-postgres
           property: database
       - key: DB_USER
         fromDatabase:
-          name: clinic-tracker-mysql
+          name: clinic-tracker-postgres
           property: user
       - key: DB_PASS
         fromDatabase:
-          name: clinic-tracker-mysql
+          name: clinic-tracker-postgres
           property: password
 
   # Frontend Static Site
@@ -47,7 +49,7 @@ services:
         destination: /index.html
 
 databases:
-  - name: clinic-tracker-mysql
+  - name: clinic-tracker-postgres
     plan: free
     databaseName: clinic_tracker
     user: clinic_user

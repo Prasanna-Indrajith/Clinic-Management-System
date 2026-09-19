@@ -1,20 +1,22 @@
+# Podman Compose / Docker Compose specification
+# Run locally with: podman compose up --build (or podman-compose up)
+
 services:
-  # MySQL Database Service
+  # PostgreSQL Database Service
   db:
-    image: mysql:8.0
-    container_name: clinic_mysql
+    image: postgres:16-alpine
+    container_name: clinic_postgres
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_password_changeme
-      MYSQL_DATABASE: clinic_tracker
-      MYSQL_USER: clinic_user
-      MYSQL_PASSWORD: changeme
+      POSTGRES_DB: clinic_tracker
+      POSTGRES_USER: clinic_user
+      POSTGRES_PASSWORD: changeme
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "clinic_user", "-pchangeme"]
+      test: ["CMD-SHELL", "pg_isready -U clinic_user -d clinic_tracker"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -34,8 +36,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
+      DB_DIALECT: postgres
       DB_HOST: db
-      DB_PORT: 3306
+      DB_PORT: 5432
       DB_NAME: clinic_tracker
       DB_USER: clinic_user
       DB_PASS: changeme
@@ -63,7 +66,7 @@ services:
       - clinic_net
 
 volumes:
-  mysql_data:
+  postgres_data:
     driver: local
 
 networks:
