@@ -4,7 +4,19 @@ const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
 const isTest = process.env.NODE_ENV === 'test';
-const isSqlite = isTest || process.env.DB_DIALECT === 'sqlite';
+const dialect = process.env.DB_DIALECT || 'postgres';
+const isSqlite = isTest || dialect === 'sqlite';
+
+const defaultPort = dialect === 'postgres' ? 5432 : 3306;
+const defaultUser = dialect === 'postgres' ? 'postgres' : 'root';
+
+const dialectOptions = {};
+if (dialect === 'postgres' && process.env.DB_SSL === 'true') {
+  dialectOptions.ssl = {
+    require: true,
+    rejectUnauthorized: false,
+  };
+}
 
 const sequelize = isSqlite
   ? new Sequelize({
@@ -18,12 +30,13 @@ const sequelize = isSqlite
     })
   : new Sequelize(
       process.env.DB_NAME || 'clinic_tracker',
-      process.env.DB_USER || 'root',
+      process.env.DB_USER || defaultUser,
       process.env.DB_PASS || '',
       {
         host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT, 10) || 3306,
-        dialect: 'mysql',
+        port: parseInt(process.env.DB_PORT, 10) || defaultPort,
+        dialect,
+        dialectOptions,
         logging: process.env.NODE_ENV === 'development' ? (msg) => console.warn(msg) : false,
         pool: {
           max: 10,
