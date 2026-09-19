@@ -10,7 +10,8 @@
     "lint:fix": "eslint src --ext .js --fix",
     "format": "prettier --write \"src/**/*.js\"",
     "test": "jest --passWithNoTests",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "seed": "node src/seed.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
