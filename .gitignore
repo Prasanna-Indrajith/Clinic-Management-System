@@ -23,15 +23,30 @@ logs/
 *.log
 npm-debug.log*
 
-# Editor / OS
+# Agent & Tool Metadata / Caches
+.codex/
+.impeccable/
+.claude/
+.cursor/
+.gemini/
+
+# Editor / IDE / OS
 .DS_Store
-.vscode/settings.json
+Thumbs.db
+.vscode/
+.idea/
 *.swp
 *.swo
+*~
 
 # Test coverage
 coverage/
 **/coverage/
+
+# Temporary / Cache
+tmp/
+temp/
+.cache/
 
 # Husky
 .husky/_
