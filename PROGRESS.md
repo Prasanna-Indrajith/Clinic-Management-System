@@ -59,7 +59,9 @@
 - [x] Doctor / Clinic Dashboard: live KPI cards, today's schedule, quick actions (`DashboardPage.jsx`)
 - [x] Admin User Management: user listing, role toggling, status activation (`AdminPage.jsx`)
 - [x] Medical records & user management backend endpoints (`/api/users`, `/api/medical-records`)
-- [x] **Test Cases**: Full integration flow passed in `backend/__tests__/e2e.test.js` (16 tests)
+- [x] Patient Portal view: read-only appointment/history view and self appointment management (`DashboardPage.jsx`, `AppointmentsPage.jsx`)
+- [x] Server-side IDOR security checks: patient role scoping on appointments, patients, and medical records
+- [x] **Test Cases**: Full integration flow passed in `backend/__tests__/e2e.test.js` (16 tests) and `backend/__tests__/patientPortal.test.js` (5 tests)
 
 ### Phase 5 — Reporting Module (Week 5)
 - [x] Daily report endpoint (`POST /api/reports/daily`) with summary stats and appointment records
@@ -81,13 +83,14 @@
 ### Phase 7 — Testing & QA Pass (Week 6)
 - [x] Full automated test suite execution (backend + frontend)
 - [x] Verified UI components with unit tests (`DataTable` pagination/sorting, `Modal` lifecycle)
+- [x] Non-functional load check: 20 concurrent simulated users under 2s (`backend/__tests__/load.test.js`)
 - [x] Boundary input validations and error presentation tested
 - [x] **Test Cases**: UI component tests passed in `frontend/src/__tests__/uiComponents.test.jsx` (8 tests)
 
 ### Phase 8 — Deployment (Week 6–7)
 - [x] Production multi-stage `backend/Dockerfile` with non-root security execution
 - [x] Multi-stage `frontend/Dockerfile` with Nginx reverse proxy and SPA fallback routing
-- [x] Full-stack orchestration via `docker-compose.yml` (MySQL + backend + frontend)
+- [x] Full-stack orchestration via `docker-compose.yml` (PostgreSQL + backend + frontend) and `docker-compose.dev.yml` (dev live-reload)
 - [x] Cloud deployment blueprint configured in `render.yaml`
 
 ### Phase 9 — Documentation & Submission (Week 7)
@@ -102,8 +105,8 @@
 
 ## Test Execution Summary
 
-- **Backend Test Suites**: 7 passed, 7 total (`auth`, `patients`, `appointments`, `reports`, `e2e`, `security`, `notifications`)
-- **Backend Tests**: 66 passed, 66 total
+- **Backend Test Suites**: 9 passed, 9 total (`auth`, `patients`, `appointments`, `reports`, `e2e`, `security`, `notifications`, `load`, `patientPortal`)
+- **Backend Tests**: 72 passed, 72 total
 - **Frontend Test Suites**: 2 passed, 2 total (`routeGuards`, `uiComponents`)
 - **Frontend Tests**: 17 passed, 17 total
-- **Overall**: 83 automated tests passing with zero failures.
+- **Overall**: 89 automated tests passing with zero failures.
