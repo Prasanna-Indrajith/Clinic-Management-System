@@ -5,7 +5,6 @@ import DataTable from '../components/ui/DataTable';
 import toast from 'react-hot-toast';
 
 const MONTHS = [
-  { value: '', label: 'All' },
   { value: '1', label: 'January' },
   { value: '2', label: 'February' },
   { value: '3', label: 'March' },
@@ -23,32 +22,37 @@ const MONTHS = [
 export default function ReportsPage() {
   const { user } = useAuth();
   const canRead = user?.role === 'admin' || user?.role === 'doctor';
+  const isDoctor = user?.role === 'doctor';
 
-  const [loading, setLoading] = useState(false);
+  const [loadingDaily, setLoadingDaily] = useState(false);
+  const [loadingMonthly, setLoadingMonthly] = useState(false);
+  const [exportingDaily, setExportingDaily] = useState(null); // 'pdf' | 'csv' | null
+  const [exportingMonthly, setExportingMonthly] = useState(null); // 'pdf' | 'csv' | null
+
   const [dailyData, setDailyData] = useState(null);
   const [monthlyData, setMonthlyData] = useState(null);
   const [error, setError] = useState(null);
 
-  const [dailyDate, setDailyDate] = useState('');
-  const [monthYear, setMonthYear] = useState('');
-  const [monthMonth, setMonthMonth] = useState('');
+  const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
+  const [monthYear, setMonthYear] = useState(String(new Date().getFullYear()));
+  const [monthMonth, setMonthMonth] = useState(String(new Date().getMonth() + 1));
 
   const handleDaily = async () => {
     if (!dailyDate) {
       toast.error('Please select a date');
       return;
     }
-    setLoading(true);
+    setLoadingDaily(true);
     setError(null);
     try {
       const res = await reportsApi.daily({ date: dailyDate });
-      setDailyData(res.data);
+      setDailyData(res.data?.data || res.data);
       setMonthlyData(null);
     } catch (err) {
       setError(err.message || 'Failed to generate daily report');
       setDailyData(null);
     } finally {
-      setLoading(false);
+      setLoadingDaily(false);
     }
   };
 
@@ -57,81 +61,93 @@ export default function ReportsPage() {
       toast.error('Please select year and month');
       return;
     }
-    setLoading(true);
+    setLoadingMonthly(true);
     setError(null);
     try {
       const res = await reportsApi.monthly({ year: parseInt(monthYear, 10), month: parseInt(monthMonth, 10) });
-      setMonthlyData(res.data);
+      setMonthlyData(res.data?.data || res.data);
       setDailyData(null);
     } catch (err) {
       setError(err.message || 'Failed to generate monthly report');
       setMonthlyData(null);
     } finally {
-      setLoading(false);
+      setLoadingMonthly(false);
     }
   };
 
-  const handleDownloadDailyCSV = () => {
-    if (!dailyData) return;
-    const rows = [
-      ['Date', dailyData.date],
-      ['Total', dailyData.summary.total],
-      ['Scheduled', dailyData.summary.scheduled],
-      ['Completed', dailyData.summary.completed],
-      ['Cancelled', dailyData.summary.cancelled],
-      [],
-      ['Patient ID', 'Patient Name', 'Contact', 'Doctor', 'Status', 'Date/Time'],
-      ...dailyData.appointments.map((a) => [
-        a.patient.patient_id,
-        a.patient.name,
-        a.patient.contact || '',
-        a.doctor.name,
-        a.status,
-        a.date_time,
-      ]),
-    ];
-    const csv = rows.map((r) => r.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+  const downloadBlob = (blob, filename) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `daily-report-${dailyData.date}.csv`;
+    a.download = filename;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success('CSV downloaded');
   };
 
-  const handleDownloadMonthlyCSV = () => {
-    if (!monthlyData) return;
-    const rows = [
-      ['Month', monthlyData.year, '-', monthlyData.month],
-      ['Total', monthlyData.summary.total],
-      ['Scheduled', monthlyData.summary.scheduled],
-      ['Completed', monthlyData.summary.completed],
-      ['Cancelled', monthlyData.summary.cancelled],
-      [],
-      ['Doctor ID', 'Doctor Name', 'Specialization', 'Total Visits'],
-      ...monthlyData.perDoctor.map((d) => [d.doctor_id, d.name, d.specialization, d.total]),
-      [],
-      ['Patient ID', 'Patient Name', 'Total Visits'],
-      ...monthlyData.perPatient.map((p) => [p.patient_id, p.name, p.total]),
-    ];
-    const csv = rows.map((r) => r.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `monthly-report-${monthlyData.year}-${String(monthlyData.month).padStart(2, '0')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('CSV downloaded');
+  const handleExportDaily = async (format) => {
+    if (!dailyDate) {
+      toast.error('Please select a date');
+      return;
+    }
+    setExportingDaily(format);
+    try {
+      const response = await reportsApi.exportDaily({ date: dailyDate, format });
+      const filename = `daily-report-${dailyDate}.${format}`;
+      downloadBlob(new Blob([response.data]), filename);
+      toast.success(`Daily report exported as ${format.toUpperCase()}`);
+    } catch (err) {
+      toast.error(`Export failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setExportingDaily(null);
+    }
+  };
+
+  const handleExportMonthly = async (format) => {
+    if (!monthYear || !monthMonth) {
+      toast.error('Please select year and month');
+      return;
+    }
+    setExportingMonthly(format);
+    try {
+      const response = await reportsApi.exportMonthly({
+        year: parseInt(monthYear, 10),
+        month: parseInt(monthMonth, 10),
+        format,
+      });
+      const monthPadded = String(monthMonth).padStart(2, '0');
+      const filename = `monthly-report-${monthYear}-${monthPadded}.${format}`;
+      downloadBlob(new Blob([response.data]), filename);
+      toast.success(`Monthly report exported as ${format.toUpperCase()}`);
+    } catch (err) {
+      toast.error(`Export failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setExportingMonthly(null);
+    }
   };
 
   const dailyColumns = [
+    {
+      key: 'date_time',
+      label: 'Time',
+      sortable: true,
+      render: (row) => (row.date_time ? new Date(row.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'),
+    },
     { key: 'patient.name', label: 'Patient', sortable: true },
+    { key: 'patient.contact', label: 'Contact', sortable: false, render: (row) => row.patient?.contact || '—' },
     { key: 'doctor.name', label: 'Doctor', sortable: true },
-    { key: 'status', label: 'Status', sortable: true },
-    { key: 'date_time', label: 'Date/Time', sortable: true },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      render: (row) => {
+        let badgeColor = 'badge-primary';
+        if (row.status === 'completed') badgeColor = 'badge-success';
+        if (row.status === 'cancelled') badgeColor = 'badge-error';
+        return <span className={`badge ${badgeColor}`}>{row.status}</span>;
+      },
+    },
   ];
 
   const monthlyDoctorColumns = [
@@ -141,35 +157,49 @@ export default function ReportsPage() {
   ];
 
   const monthlyPatientColumns = [
+    { key: 'patient_id', label: 'Patient ID', sortable: true },
     { key: 'name', label: 'Patient', sortable: true },
     { key: 'total', label: 'Total Visits', sortable: true },
   ];
 
   return (
-    <div>
-      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 600 }}>
-        Reports
-      </h2>
-      <p className="text-muted" style={{ marginTop: 'var(--space-1)' }}>
-        Generate daily and monthly reports with CSV export.
-      </p>
+    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
+        <div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 600 }}>
+            Reports & Analytics
+          </h2>
+          <p className="text-muted" style={{ marginTop: 'var(--space-1)' }}>
+            Generate executive summaries and export professional PDF / CSV reports.
+          </p>
+        </div>
+
+        {isDoctor && (
+          <div style={{ background: 'var(--color-primary-50, #f0fdf4)', border: '1px solid var(--color-primary-200, #bbf7d0)', padding: 'var(--space-2) var(--space-4)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)', color: '#166534' }}>
+            🔒 Doctor Mode: Data restricted to your assigned appointments only.
+          </div>
+        )}
+      </div>
 
       {!canRead && (
         <div className="card" style={{ marginTop: 'var(--space-6)' }}>
-          <p className="text-muted">You do not have permission to view reports.</p>
+          <p className="text-muted">You do not have permission to view or generate reports.</p>
         </div>
       )}
 
       {canRead && (
         <>
-          {/* Daily Report */}
+          {/* Daily Report Card */}
           <div className="card" style={{ marginTop: 'var(--space-6)' }}>
-            <h3 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>
-              Daily Report
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+              <h3 style={{ fontSize: 'var(--text-xl)', fontWeight: 600 }}>
+                📅 Daily Appointments Report
+              </h3>
+            </div>
+
             <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
-                <label className="form-label">Date</label>
+              <div className="form-group" style={{ flex: 1, minWidth: 220 }}>
+                <label className="form-label">Report Date</label>
                 <input
                   type="date"
                   className="form-input"
@@ -177,14 +207,35 @@ export default function ReportsPage() {
                   onChange={(e) => setDailyDate(e.target.value)}
                 />
               </div>
-              <button className="btn btn-primary" onClick={handleDaily} type="button" disabled={loading}>
-                {loading ? 'Generating...' : 'Generate Daily Report'}
+
+              <button
+                className="btn btn-primary"
+                onClick={handleDaily}
+                type="button"
+                disabled={loadingDaily}
+              >
+                {loadingDaily ? 'Generating...' : 'View Report'}
               </button>
-              {dailyData && (
-                <button className="btn btn-secondary" onClick={handleDownloadDailyCSV} type="button">
-                  Download CSV
-                </button>
-              )}
+
+              <button
+                className="btn btn-secondary"
+                onClick={() => handleExportDaily('pdf')}
+                type="button"
+                disabled={exportingDaily === 'pdf'}
+                title="Download high-resolution PDF document"
+              >
+                {exportingDaily === 'pdf' ? 'Generating PDF...' : '📄 Download PDF'}
+              </button>
+
+              <button
+                className="btn btn-secondary"
+                onClick={() => handleExportDaily('csv')}
+                type="button"
+                disabled={exportingDaily === 'csv'}
+                title="Download CSV spreadsheet"
+              >
+                {exportingDaily === 'csv' ? 'Generating CSV...' : '📊 Download CSV'}
+              </button>
             </div>
 
             {error && (
@@ -193,31 +244,48 @@ export default function ReportsPage() {
               </div>
             )}
 
-            {dailyData && !loading && (
+            {dailyData && !loadingDaily && (
               <div style={{ marginTop: 'var(--space-6)' }}>
-                <div style={{ display: 'flex', gap: 'var(--space-6)', marginBottom: 'var(--space-6)', flexWrap: 'wrap' }}>
-                  <div>Total: <strong>{dailyData.summary.total}</strong></div>
-                  <div>Scheduled: <strong>{dailyData.summary.scheduled}</strong></div>
-                  <div>Completed: <strong>{dailyData.summary.completed}</strong></div>
-                  <div>Cancelled: <strong>{dailyData.summary.cancelled}</strong></div>
+                {/* Metric Summary Ribbon */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Total Appointments</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-primary-600)' }}>{dailyData.summary?.total ?? 0}</div>
+                  </div>
+                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Scheduled</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#0284c7' }}>{dailyData.summary?.scheduled ?? 0}</div>
+                  </div>
+                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Completed</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#16a34a' }}>{dailyData.summary?.completed ?? 0}</div>
+                  </div>
+                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Cancelled</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#dc2626' }}>{dailyData.summary?.cancelled ?? 0}</div>
+                  </div>
                 </div>
+
                 <DataTable
                   columns={dailyColumns}
-                  data={dailyData.appointments}
-                  pagination={{ page: 1, limit: 50, total: dailyData.appointments.length, totalPages: 1 }}
+                  data={dailyData.appointments || []}
+                  pagination={{ page: 1, limit: 50, total: dailyData.appointments?.length || 0, totalPages: 1 }}
                   onPageChange={() => {}}
                 />
               </div>
             )}
           </div>
 
-          {/* Monthly Report */}
+          {/* Monthly Report Card */}
           <div className="card" style={{ marginTop: 'var(--space-6)' }}>
-            <h3 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>
-              Monthly Report
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+              <h3 style={{ fontSize: 'var(--text-xl)', fontWeight: 600 }}>
+                📈 Monthly Activity Summary
+              </h3>
+            </div>
+
             <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+              <div className="form-group" style={{ flex: 1, minWidth: 140 }}>
                 <label className="form-label">Year</label>
                 <input
                   type="number"
@@ -229,57 +297,85 @@ export default function ReportsPage() {
                   max="2100"
                 />
               </div>
-              <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+
+              <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
                 <label className="form-label">Month</label>
                 <select
                   className="form-input"
                   value={monthMonth}
                   onChange={(e) => setMonthMonth(e.target.value)}
                 >
-                  <option value="">Select month</option>
-                  {MONTHS.filter((m) => m.value).map((m) => (
+                  {MONTHS.map((m) => (
                     <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
               </div>
-              <button className="btn btn-primary" onClick={handleMonthly} type="button" disabled={loading}>
-                {loading ? 'Generating...' : 'Generate Monthly Report'}
+
+              <button
+                className="btn btn-primary"
+                onClick={handleMonthly}
+                type="button"
+                disabled={loadingMonthly}
+              >
+                {loadingMonthly ? 'Generating...' : 'View Report'}
               </button>
-              {monthlyData && (
-                <button className="btn btn-secondary" onClick={handleDownloadMonthlyCSV} type="button">
-                  Download CSV
-                </button>
-              )}
+
+              <button
+                className="btn btn-secondary"
+                onClick={() => handleExportMonthly('pdf')}
+                type="button"
+                disabled={exportingMonthly === 'pdf'}
+                title="Download high-resolution PDF document"
+              >
+                {exportingMonthly === 'pdf' ? 'Generating PDF...' : '📄 Download PDF'}
+              </button>
+
+              <button
+                className="btn btn-secondary"
+                onClick={() => handleExportMonthly('csv')}
+                type="button"
+                disabled={exportingMonthly === 'csv'}
+                title="Download CSV spreadsheet"
+              >
+                {exportingMonthly === 'csv' ? 'Generating CSV...' : '📊 Download CSV'}
+              </button>
             </div>
 
-            {error && (
-              <div style={{ color: 'var(--color-error)', marginTop: 'var(--space-4)' }} role="alert">
-                {error}
-              </div>
-            )}
-
-            {monthlyData && !loading && (
+            {monthlyData && !loadingMonthly && (
               <div style={{ marginTop: 'var(--space-6)' }}>
-                <div style={{ display: 'flex', gap: 'var(--space-6)', marginBottom: 'var(--space-6)', flexWrap: 'wrap' }}>
-                  <div>Total: <strong>{monthlyData.summary.total}</strong></div>
-                  <div>Scheduled: <strong>{monthlyData.summary.scheduled}</strong></div>
-                  <div>Completed: <strong>{monthlyData.summary.completed}</strong></div>
-                  <div>Cancelled: <strong>{monthlyData.summary.cancelled}</strong></div>
+                {/* Metric Summary Ribbon */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Total Visits</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-primary-600)' }}>{monthlyData.summary?.total ?? 0}</div>
+                  </div>
+                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Scheduled</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#0284c7' }}>{monthlyData.summary?.scheduled ?? 0}</div>
+                  </div>
+                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Completed</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#16a34a' }}>{monthlyData.summary?.completed ?? 0}</div>
+                  </div>
+                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Cancelled</div>
+                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#dc2626' }}>{monthlyData.summary?.cancelled ?? 0}</div>
+                  </div>
                 </div>
 
-                <h4 style={{ fontWeight: 600, marginBottom: 'var(--space-2)' }}>Visits per Doctor</h4>
+                <h4 style={{ fontWeight: 600, marginBottom: 'var(--space-2)' }}>Visits by Doctor</h4>
                 <DataTable
                   columns={monthlyDoctorColumns}
-                  data={monthlyData.perDoctor}
-                  pagination={{ page: 1, limit: 50, total: monthlyData.perDoctor.length, totalPages: 1 }}
+                  data={monthlyData.perDoctor || []}
+                  pagination={{ page: 1, limit: 50, total: monthlyData.perDoctor?.length || 0, totalPages: 1 }}
                   onPageChange={() => {}}
                 />
 
-                <h4 style={{ fontWeight: 600, marginTop: 'var(--space-6)', marginBottom: 'var(--space-2)' }}>Visits per Patient</h4>
+                <h4 style={{ fontWeight: 600, marginTop: 'var(--space-6)', marginBottom: 'var(--space-2)' }}>Visits by Patient</h4>
                 <DataTable
                   columns={monthlyPatientColumns}
-                  data={monthlyData.perPatient}
-                  pagination={{ page: 1, limit: 50, total: monthlyData.perPatient.length, totalPages: 1 }}
+                  data={monthlyData.perPatient || []}
+                  pagination={{ page: 1, limit: 50, total: monthlyData.perPatient?.length || 0, totalPages: 1 }}
                   onPageChange={() => {}}
                 />
               </div>

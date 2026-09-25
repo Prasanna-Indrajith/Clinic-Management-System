@@ -74,6 +74,8 @@ export const appointApi = {
 export const reportsApi = {
   daily: (params) => api.post('/reports/daily', params),
   monthly: (params) => api.post('/reports/monthly', params),
+  exportDaily: (params) => api.post('/reports/daily/export', params, { responseType: 'blob' }),
+  exportMonthly: (params) => api.post('/reports/monthly/export', params, { responseType: 'blob' }),
 };
 
 export const usersApi = {
