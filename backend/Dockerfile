@@ -1,5 +1,5 @@
 # ─── Clinic Appointment & Patient Tracker — Backend Dockerfile ───
-FROM node:22-alpine AS production
+FROM docker.io/library/node:22-alpine AS production
 
 WORKDIR /app
 

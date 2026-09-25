@@ -1,7 +1,7 @@
 # ─── Clinic Appointment & Patient Tracker — Frontend Dockerfile ───
 
 # Stage 1: Build Vite React application
-FROM node:22-alpine AS builder
+FROM docker.io/library/node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Serve static bundle via Nginx
-FROM nginx:alpine AS runner
+FROM docker.io/library/nginx:alpine AS runner
 
 # Copy customized Nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
