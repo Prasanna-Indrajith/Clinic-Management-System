@@ -12,7 +12,8 @@ const server = http.createServer(app);
 server.listen(PORT, async () => {
   try {
     const db = require('./models');
-    await db.sequelize.sync({ force: false });
+    const isDev = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test';
+    await db.sequelize.sync({ alter: isDev, force: false });
     logger.info('Database synced successfully');
   } catch (err) {
     logger.error('Database sync failed', { message: err.message });

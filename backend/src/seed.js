@@ -7,7 +7,7 @@ const logger = require('./config/logger');
 async function seed() {
   try {
     logger.info('Connecting to database and syncing schema...');
-    await sequelize.sync({ force: false });
+    await sequelize.sync({ alter: true });
 
     // 1. Seed Users
     logger.info('Seeding users...');
@@ -51,6 +51,16 @@ async function seed() {
       },
     });
 
+    const [patientUser] = await User.findOrCreate({
+      where: { email: 'patient@clinic.local' },
+      defaults: {
+        name: 'Alice Johnson',
+        email: 'patient@clinic.local',
+        password_hash: 'PatientPass123!',
+        role: 'patient',
+      },
+    });
+
     // 2. Seed Doctors
     logger.info('Seeding doctor profiles...');
     const [doc1] = await Doctor.findOrCreate({
@@ -85,6 +95,7 @@ async function seed() {
         contact: '555-1001',
         address: '742 Evergreen Terrace, Springfield',
         notes: 'Hypertension monitoring; Penicillin allergy.',
+        user_id: patientUser.user_id,
       },
     });
 
@@ -187,6 +198,7 @@ async function seed() {
     logger.info('Doctor Account (1):   dr.smith@clinic.local / DoctorPass123!');
     logger.info('Doctor Account (2):   dr.house@clinic.local / DoctorPass123!');
     logger.info('Receptionist Account: receptionist@clinic.local / ReceptionPass123!');
+    logger.info('Patient Account:      patient@clinic.local / PatientPass123!');
     logger.info('--------------------------------------');
 
     process.exit(0);
