@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { patientsApi } from '../api/client';
+import { patientsApi, medicalRecordsApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
 import toast from 'react-hot-toast';
@@ -19,7 +19,16 @@ export default function PatientsPage() {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [formErrors, setFormErrors] = useState({});
 
+  // Medical Records Modal State
+  const [recordsModalOpen, setRecordsModalOpen] = useState(false);
+  const [recordsPatient, setRecordsPatient] = useState(null);
+  const [medicalRecords, setMedicalRecords] = useState([]);
+  const [loadingRecords, setLoadingRecords] = useState(false);
+  const [recordForm, setRecordForm] = useState({ diagnosis: '', prescription: '', notes: '' });
+  const [savingRecord, setSavingRecord] = useState(false);
+
   const canWrite = user?.role === 'admin';
+  const canAccessRecords = user?.role === 'admin' || user?.role === 'doctor';
 
   const fetchPatients = useCallback(async () => {
     setLoading(true);
@@ -67,6 +76,45 @@ export default function PatientsPage() {
       fetchPatients();
     } catch (err) {
       toast.error(err.message || 'Failed to delete patient');
+    }
+  };
+
+  const handleViewRecords = async (patient) => {
+    setRecordsPatient(patient);
+    setRecordsModalOpen(true);
+    setLoadingRecords(true);
+    setRecordForm({ diagnosis: '', prescription: '', notes: '' });
+    try {
+      const res = await medicalRecordsApi.list(patient.patient_id);
+      setMedicalRecords(res.data.data || []);
+    } catch (err) {
+      toast.error(err.message || 'Failed to load medical records');
+    } finally {
+      setLoadingRecords(false);
+    }
+  };
+
+  const handleAddRecord = async (e) => {
+    e.preventDefault();
+    if (!recordForm.diagnosis.trim()) {
+      toast.error('Diagnosis is required');
+      return;
+    }
+    setSavingRecord(true);
+    try {
+      await medicalRecordsApi.create(recordsPatient.patient_id, {
+        diagnosis: recordForm.diagnosis.trim(),
+        prescription: recordForm.prescription.trim() || undefined,
+        notes: recordForm.notes.trim() || undefined,
+      });
+      toast.success('Medical record added');
+      setRecordForm({ diagnosis: '', prescription: '', notes: '' });
+      const res = await medicalRecordsApi.list(recordsPatient.patient_id);
+      setMedicalRecords(res.data.data || []);
+    } catch (err) {
+      toast.error(err.message || 'Failed to add medical record');
+    } finally {
+      setSavingRecord(false);
     }
   };
 
@@ -122,6 +170,15 @@ export default function PatientsPage() {
       sortable: false,
       render: (_, row) => (
         <div className="flex gap-2">
+          {canAccessRecords && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleViewRecords(row)}
+              type="button"
+            >
+              Records
+            </button>
+          )}
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => handleEdit(row)}
@@ -265,6 +322,117 @@ export default function PatientsPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Medical Records Modal */}
+      <Modal
+        isOpen={recordsModalOpen}
+        title={`Medical Records — ${recordsPatient?.name || 'Patient'}`}
+        onClose={() => setRecordsModalOpen(false)}
+        size="lg"
+      >
+        <div style={{ maxHeight: '65vh', overflowY: 'auto', paddingRight: 'var(--space-2)' }}>
+          {loadingRecords ? (
+            <div className="flex justify-center items-center" style={{ padding: 'var(--space-8)' }}>
+              <div className="spinner" style={{ width: 28, height: 28 }} />
+            </div>
+          ) : medicalRecords.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: 'var(--space-6)', background: 'var(--color-bg-subtle)' }}>
+              <p className="text-muted">No medical records recorded for this patient yet.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+              {medicalRecords.map((rec) => (
+                <div
+                  key={rec.record_id}
+                  className="card"
+                  style={{
+                    padding: 'var(--space-4)',
+                    borderLeft: '4px solid var(--color-primary)',
+                    background: 'var(--color-surface)',
+                  }}
+                >
+                  <div className="flex justify-between items-center" style={{ marginBottom: 'var(--space-2)' }}>
+                    <span className="font-semibold text-sm" style={{ color: 'var(--color-text)' }}>
+                      Dr. {rec.doctor?.name || 'Practitioner'}
+                    </span>
+                    <span className="text-xs text-muted">
+                      {new Date(rec.created_at).toLocaleDateString('en-GB', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                  <div style={{ marginBottom: 'var(--space-2)' }}>
+                    <span className="text-xs font-semibold text-muted uppercase">Diagnosis:</span>
+                    <p style={{ marginTop: '2px', fontWeight: 500 }}>{rec.diagnosis}</p>
+                  </div>
+                  {rec.prescription && (
+                    <div style={{ marginBottom: 'var(--space-2)' }}>
+                      <span className="text-xs font-semibold text-muted uppercase">Prescription:</span>
+                      <p style={{ marginTop: '2px', whiteSpace: 'pre-wrap' }}>{rec.prescription}</p>
+                    </div>
+                  )}
+                  {rec.notes && (
+                    <div>
+                      <span className="text-xs font-semibold text-muted uppercase">Notes:</span>
+                      <p className="text-muted text-sm" style={{ marginTop: '2px', whiteSpace: 'pre-wrap' }}>{rec.notes}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {canAccessRecords && (
+            <div className="card" style={{ marginTop: 'var(--space-4)', background: 'var(--color-bg-subtle)', padding: 'var(--space-4)' }}>
+              <h4 style={{ fontSize: 'var(--text-md)', fontWeight: 600, marginBottom: 'var(--space-3)' }}>
+                Add Clinical Entry
+              </h4>
+              <form onSubmit={handleAddRecord}>
+                <div className="form-group" style={{ marginBottom: 'var(--space-3)' }}>
+                  <label className="form-label" htmlFor="record-diagnosis">Diagnosis *</label>
+                  <input
+                    id="record-diagnosis"
+                    className="form-input"
+                    placeholder="e.g. Acute bronchitis, Hypertension stage 1"
+                    value={recordForm.diagnosis}
+                    onChange={(e) => setRecordForm((prev) => ({ ...prev, diagnosis: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 'var(--space-3)' }}>
+                  <label className="form-label" htmlFor="record-prescription">Prescription</label>
+                  <textarea
+                    id="record-prescription"
+                    className="form-input"
+                    rows={2}
+                    placeholder="e.g. Amoxicillin 500mg tid x 7 days"
+                    value={recordForm.prescription}
+                    onChange={(e) => setRecordForm((prev) => ({ ...prev, prescription: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 'var(--space-3)' }}>
+                  <label className="form-label" htmlFor="record-notes">Clinical Notes</label>
+                  <textarea
+                    id="record-notes"
+                    className="form-input"
+                    rows={2}
+                    placeholder="Additional clinical observations or follow-up instructions..."
+                    value={recordForm.notes}
+                    onChange={(e) => setRecordForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={savingRecord}>
+                    {savingRecord ? 'Saving...' : 'Add Record'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );
