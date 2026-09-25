@@ -63,11 +63,16 @@ export default function DataTable({
                         ) : (
                             data.map((row, i) => (
                                 <tr key={row.id || row.patient_id || row.doctor_id || row.appointment_id || i}>
-                                    {columns.map((col) => (
-                                        <td key={col.key}>
-                                            {col.render ? col.render(row[col.key], row) : row[col.key]}
-                                        </td>
-                                    ))}
+                                    {columns.map((col) => {
+                                        const cellVal = col.key && col.key.includes('.')
+                                            ? col.key.split('.').reduce((acc, part) => acc?.[part], row)
+                                            : row[col.key];
+                                        return (
+                                            <td key={col.key}>
+                                                {col.render ? col.render(cellVal, row) : (cellVal ?? '—')}
+                                            </td>
+                                        );
+                                    })}
                                 </tr>
                             ))
                         )}

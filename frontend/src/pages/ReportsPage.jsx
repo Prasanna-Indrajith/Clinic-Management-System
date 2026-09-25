@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { reportsApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
@@ -19,6 +19,16 @@ const MONTHS = [
   { value: '12', label: 'December' },
 ];
 
+/**
+ * Returns formatted YYYY-MM-DD for a given date in local timezone
+ */
+const formatLocalDate = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function ReportsPage() {
   const { user } = useAuth();
   const canRead = user?.role === 'admin' || user?.role === 'doctor';
@@ -33,9 +43,16 @@ export default function ReportsPage() {
   const [monthlyData, setMonthlyData] = useState(null);
   const [error, setError] = useState(null);
 
-  const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
+  // Default to today in user's local timezone
+  const [dailyDate, setDailyDate] = useState(formatLocalDate(new Date()));
   const [monthYear, setMonthYear] = useState(String(new Date().getFullYear()));
   const [monthMonth, setMonthMonth] = useState(String(new Date().getMonth() + 1));
+
+  // Table sorting & pagination state
+  const [dailySortKey, setDailySortKey] = useState('date_time');
+  const [dailySortDir, setDailySortDir] = useState('asc');
+  const [dailyPage, setDailyPage] = useState(1);
+  const pageSize = 10;
 
   const handleDaily = async () => {
     if (!dailyDate) {
@@ -44,6 +61,7 @@ export default function ReportsPage() {
     }
     setLoadingDaily(true);
     setError(null);
+    setDailyPage(1);
     try {
       const res = await reportsApi.daily({ date: dailyDate });
       setDailyData(res.data?.data || res.data);
@@ -73,6 +91,12 @@ export default function ReportsPage() {
     } finally {
       setLoadingMonthly(false);
     }
+  };
+
+  const setDatePreset = (offsetDays) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    setDailyDate(formatLocalDate(d));
   };
 
   const downloadBlob = (blob, filename) => {
@@ -132,34 +156,85 @@ export default function ReportsPage() {
       key: 'date_time',
       label: 'Time',
       sortable: true,
-      render: (row) => (row.date_time ? new Date(row.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'),
+      render: (val, row) => {
+        const dt = val || row?.date_time;
+        if (!dt) return '—';
+        return new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      },
     },
-    { key: 'patient.name', label: 'Patient', sortable: true },
-    { key: 'patient.contact', label: 'Contact', sortable: false, render: (row) => row.patient?.contact || '—' },
-    { key: 'doctor.name', label: 'Doctor', sortable: true },
+    {
+      key: 'patient.name',
+      label: 'Patient',
+      sortable: true,
+      render: (val, row) => val || row?.patient?.name || '—',
+    },
+    {
+      key: 'patient.contact',
+      label: 'Contact',
+      sortable: false,
+      render: (val, row) => val || row?.patient?.contact || '—',
+    },
+    {
+      key: 'doctor.name',
+      label: 'Doctor',
+      sortable: true,
+      render: (val, row) => val || row?.doctor?.name || '—',
+    },
     {
       key: 'status',
       label: 'Status',
       sortable: true,
-      render: (row) => {
+      render: (val, row) => {
+        const status = (val || row?.status || 'unknown').toLowerCase();
         let badgeColor = 'badge-primary';
-        if (row.status === 'completed') badgeColor = 'badge-success';
-        if (row.status === 'cancelled') badgeColor = 'badge-error';
-        return <span className={`badge ${badgeColor}`}>{row.status}</span>;
+        if (status === 'completed') badgeColor = 'badge-success';
+        if (status === 'cancelled') badgeColor = 'badge-error';
+        if (status === 'scheduled') badgeColor = 'badge-warning';
+        return <span className={`badge ${badgeColor}`}>{status.toUpperCase()}</span>;
       },
     },
   ];
 
+  // Sort and paginate daily appointments
+  const sortedDailyAppointments = useMemo(() => {
+    if (!dailyData?.appointments) return [];
+    const appts = [...dailyData.appointments];
+    if (!dailySortKey) return appts;
+
+    appts.sort((a, b) => {
+      let valA = dailySortKey.includes('.')
+        ? dailySortKey.split('.').reduce((acc, p) => acc?.[p], a)
+        : a[dailySortKey];
+      let valB = dailySortKey.includes('.')
+        ? dailySortKey.split('.').reduce((acc, p) => acc?.[p], b)
+        : b[dailySortKey];
+
+      if (valA == null) return 1;
+      if (valB == null) return -1;
+      if (valA < valB) return dailySortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return dailySortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return appts;
+  }, [dailyData, dailySortKey, dailySortDir]);
+
+  const totalPages = Math.ceil(sortedDailyAppointments.length / pageSize) || 1;
+  const paginatedAppointments = sortedDailyAppointments.slice(
+    (dailyPage - 1) * pageSize,
+    dailyPage * pageSize
+  );
+
   const monthlyDoctorColumns = [
-    { key: 'name', label: 'Doctor', sortable: true },
-    { key: 'specialization', label: 'Specialization', sortable: true },
-    { key: 'total', label: 'Total Visits', sortable: true },
+    { key: 'name', label: 'Doctor', sortable: true, render: (val, row) => val || row?.name || '—' },
+    { key: 'specialization', label: 'Specialization', sortable: true, render: (val, row) => val || row?.specialization || '—' },
+    { key: 'total', label: 'Total Visits', sortable: true, render: (val, row) => val ?? row?.total ?? 0 },
   ];
 
   const monthlyPatientColumns = [
-    { key: 'patient_id', label: 'Patient ID', sortable: true },
-    { key: 'name', label: 'Patient', sortable: true },
-    { key: 'total', label: 'Total Visits', sortable: true },
+    { key: 'patient_id', label: 'Patient ID', sortable: true, render: (val, row) => val ?? row?.patient_id ?? '—' },
+    { key: 'name', label: 'Patient', sortable: true, render: (val, row) => val || row?.name || '—' },
+    { key: 'total', label: 'Total Visits', sortable: true, render: (val, row) => val ?? row?.total ?? 0 },
   ];
 
   return (
@@ -170,13 +245,13 @@ export default function ReportsPage() {
             Reports & Analytics
           </h2>
           <p className="text-muted" style={{ marginTop: 'var(--space-1)' }}>
-            Generate executive summaries and export professional PDF / CSV reports.
+            Generate operational appointment reports and export high-resolution PDF / CSV documents.
           </p>
         </div>
 
         {isDoctor && (
-          <div style={{ background: 'var(--color-primary-50, #f0fdf4)', border: '1px solid var(--color-primary-200, #bbf7d0)', padding: 'var(--space-2) var(--space-4)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)', color: '#166534' }}>
-            🔒 Doctor Mode: Data restricted to your assigned appointments only.
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: 'var(--space-2) var(--space-4)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)', color: '#166534' }}>
+            🔒 Doctor Mode: Report metrics are automatically scoped to your assigned appointments.
           </div>
         )}
       </div>
@@ -199,7 +274,35 @@ export default function ReportsPage() {
 
             <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div className="form-group" style={{ flex: 1, minWidth: 220 }}>
-                <label className="form-label">Report Date</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-1)' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Report Date</label>
+                  <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: '11px', padding: '2px 6px' }}
+                      onClick={() => setDatePreset(-1)}
+                    >
+                      Yesterday
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: '11px', padding: '2px 6px' }}
+                      onClick={() => setDatePreset(0)}
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: '11px', padding: '2px 6px' }}
+                      onClick={() => setDatePreset(1)}
+                    >
+                      Tomorrow
+                    </button>
+                  </div>
+                </div>
                 <input
                   type="date"
                   className="form-input"
@@ -214,7 +317,7 @@ export default function ReportsPage() {
                 type="button"
                 disabled={loadingDaily}
               >
-                {loadingDaily ? 'Generating...' : 'View Report'}
+                {loadingDaily ? 'Loading Report...' : '🔍 View Report'}
               </button>
 
               <button
@@ -266,11 +369,28 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
+                <div style={{ marginBottom: 'var(--space-3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ fontWeight: 600, fontSize: 'var(--text-md)' }}>
+                    Appointments on {dailyDate} ({sortedDailyAppointments.length} record{sortedDailyAppointments.length === 1 ? '' : 's'})
+                  </h4>
+                  {sortedDailyAppointments.length > 0 && (
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                      Click any column header to sort
+                    </span>
+                  )}
+                </div>
+
                 <DataTable
                   columns={dailyColumns}
-                  data={dailyData.appointments || []}
-                  pagination={{ page: 1, limit: 50, total: dailyData.appointments?.length || 0, totalPages: 1 }}
-                  onPageChange={() => {}}
+                  data={paginatedAppointments}
+                  pagination={{ page: dailyPage, limit: pageSize, total: sortedDailyAppointments.length, totalPages }}
+                  onPageChange={(p) => setDailyPage(p)}
+                  sortKey={dailySortKey}
+                  sortDir={dailySortDir}
+                  onSort={(key, dir) => {
+                    setDailySortKey(key);
+                    setDailySortDir(dir);
+                  }}
                 />
               </div>
             )}
@@ -317,7 +437,7 @@ export default function ReportsPage() {
                 type="button"
                 disabled={loadingMonthly}
               >
-                {loadingMonthly ? 'Generating...' : 'View Report'}
+                {loadingMonthly ? 'Loading Report...' : '🔍 View Report'}
               </button>
 
               <button
