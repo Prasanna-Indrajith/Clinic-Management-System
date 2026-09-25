@@ -15,5 +15,6 @@ router.use('/appointments', require('./appointments'));
 router.use('/users', require('./users'));
 router.use('/medical-records', require('./medicalRecords'));
 router.use('/reports', require('./reports'));
+router.use('/notifications', require('./notifications'));
 
 module.exports = router;
