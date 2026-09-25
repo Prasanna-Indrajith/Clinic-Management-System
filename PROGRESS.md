@@ -94,13 +94,16 @@
 - [x] Comprehensive production [README.md](README.md) with quick start, docker, and test guide
 - [x] Swagger OpenAPI 3.0 specification available at `/api/docs`
 - [x] Progress tracking document ([PROGRESS.md](PROGRESS.md)) and status reference ([STATUS.md](STATUS.md))
+- [x] Notification reminder queue stub (`POST /api/notifications/reminder/:appointmentId`) with audit logging
+- [x] Medical records modal & clinical entry integration in `PatientsPage.jsx`
+- [x] Live recent activity feed on clinic `DashboardPage.jsx`
 
 ---
 
 ## Test Execution Summary
 
-- **Backend Test Suites**: 6 passed, 6 total (`auth`, `patients`, `appointments`, `reports`, `e2e`, `security`)
-- **Backend Tests**: 62 passed, 62 total
+- **Backend Test Suites**: 7 passed, 7 total (`auth`, `patients`, `appointments`, `reports`, `e2e`, `security`, `notifications`)
+- **Backend Tests**: 66 passed, 66 total
 - **Frontend Test Suites**: 2 passed, 2 total (`routeGuards`, `uiComponents`)
 - **Frontend Tests**: 17 passed, 17 total
-- **Overall**: 79 automated tests passing with zero failures.
+- **Overall**: 83 automated tests passing with zero failures.
