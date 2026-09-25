@@ -124,6 +124,13 @@ const getAllAppointments = async (req, res) => {
         return res.status(200).json({ data: [], pagination: { total: 0, page, limit, totalPages: 0 } });
       }
       whereClause.doctor_id = currentDoctorId;
+    } else if (req.user.role === 'patient') {
+      const patientProfile = await Patient.findOne({ where: { user_id: req.user.id } });
+      const currentPatientId = patientProfile ? patientProfile.patient_id : null;
+      if (!currentPatientId) {
+        return res.status(200).json({ data: [], pagination: { total: 0, page, limit, totalPages: 0 } });
+      }
+      whereClause.patient_id = currentPatientId;
     } else if (doctor_id) {
       whereClause.doctor_id = doctor_id;
     }
@@ -192,11 +199,16 @@ const getAppointmentById = async (req, res) => {
       return res.status(404).json({ error: 'Appointment not found' });
     }
 
-    // Doctor role check
+    // Role checks (Doctor or Patient IDOR scoping)
     if (req.user.role === 'doctor') {
       const doctorProfile = await Doctor.findOne({ where: { user_id: req.user.id } });
       if (doctorProfile && appointment.doctor_id !== doctorProfile.doctor_id) {
         return res.status(403).json({ error: "Forbidden: You cannot access another doctor's appointment." });
+      }
+    } else if (req.user.role === 'patient') {
+      const patientProfile = await Patient.findOne({ where: { user_id: req.user.id } });
+      if (!patientProfile || appointment.patient_id !== patientProfile.patient_id) {
+        return res.status(403).json({ error: "Forbidden: You cannot access another patient's appointment." });
       }
     }
 
@@ -286,6 +298,14 @@ const cancelAppointment = async (req, res) => {
 
     if (!appointment) {
       return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Patient role check: can only cancel own appointment
+    if (req.user.role === 'patient') {
+      const patientProfile = await Patient.findOne({ where: { user_id: req.user.id } });
+      if (!patientProfile || appointment.patient_id !== patientProfile.patient_id) {
+        return res.status(403).json({ error: "Forbidden: You cannot cancel another patient's appointment." });
+      }
     }
 
     appointment.status = 'cancelled';

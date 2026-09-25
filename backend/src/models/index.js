@@ -12,6 +12,9 @@ const AuditLog = require('./AuditLog');
 User.hasOne(Doctor, { foreignKey: 'user_id', as: 'doctorProfile', onDelete: 'SET NULL' });
 Doctor.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
+User.hasOne(Patient, { foreignKey: 'user_id', as: 'patientProfile', onDelete: 'SET NULL' });
+Patient.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
 Patient.hasMany(Appointment, { foreignKey: 'patient_id', as: 'appointments' });
 Appointment.belongsTo(Patient, { foreignKey: 'patient_id', as: 'patient' });
 

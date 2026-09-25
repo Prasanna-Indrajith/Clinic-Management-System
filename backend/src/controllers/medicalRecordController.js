@@ -30,6 +30,10 @@ const getRecordsByPatient = async (req, res) => {
             if (!hasAccess) {
                 return res.status(403).json({ error: 'Forbidden: Access to this patient\'s records is restricted' });
             }
+        } else if (req.user.role === 'patient') {
+            if (patient.user_id !== req.user.id) {
+                return res.status(403).json({ error: 'Forbidden: Access to this patient\'s records is restricted' });
+            }
         }
 
         const records = await MedicalRecord.findAll({
@@ -59,6 +63,10 @@ const createRecord = async (req, res) => {
         const patient = await Patient.findByPk(patientId);
         if (!patient) {
             return res.status(404).json({ error: 'Patient not found' });
+        }
+
+        if (req.user.role === 'patient' || req.user.role === 'receptionist') {
+            return res.status(403).json({ error: 'Forbidden: Only doctors and administrators can create medical records' });
         }
 
         // Doctor must have a doctor profile

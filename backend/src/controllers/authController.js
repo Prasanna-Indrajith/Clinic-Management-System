@@ -1,6 +1,6 @@
 'use strict';
 
-const { User } = require('../models');
+const { User, Patient } = require('../models');
 const logger = require('../config/logger');
 const { generateToken } = require('../utils/token');
 const audit = require('../utils/auditLog');
@@ -25,6 +25,15 @@ const register = async (req, res) => {
       password_hash: password,
       role: role || 'patient',
     });
+
+    if (user.role === 'patient') {
+      await Patient.create({
+        user_id: user.user_id,
+        name: user.name,
+        dob: '2000-01-01',
+        contact: 'Pending update',
+      });
+    }
 
     const ipAddress = req.ip || req.socket.remoteAddress;
     await audit.log({

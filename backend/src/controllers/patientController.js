@@ -41,6 +41,8 @@ const getAllPatients = async (req, res) => {
         where: { doctor_id: doctorId },
         attributes: [],
       });
+    } else if (req.user.role === 'patient') {
+      whereClause.user_id = req.user.id;
     }
 
     const { count, rows } = await Patient.findAndCountAll({
@@ -98,6 +100,10 @@ const getPatientById = async (req, res) => {
       });
 
       if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden: Access to this patient is restricted.' });
+      }
+    } else if (req.user.role === 'patient') {
+      if (patient.user_id !== req.user.id) {
         return res.status(403).json({ error: 'Forbidden: Access to this patient is restricted.' });
       }
     }
