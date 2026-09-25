@@ -70,7 +70,12 @@ export default function RegisterPage() {
 
       <div className={styles.card}>
         <div className={styles.brand}>
-          <div className={styles.brandMark}>CM</div>
+          <div className={styles.brandMark} aria-hidden="true">
+            <svg className={styles.brandIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v18M3 12h18" />
+              <path d="M7 12h2l2-3 2 6 2-3h2" />
+            </svg>
+          </div>
           <div>
             <h1 className={styles.brandName}>Clinic<strong>Mate</strong></h1>
             <p className={styles.brandTagline}>Clinic Appointment & Patient Tracker</p>
