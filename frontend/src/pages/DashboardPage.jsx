@@ -14,6 +14,7 @@ export default function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [todaySchedule, setTodaySchedule] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
   const [loadingSchedule, setLoadingSchedule] = useState(true);
 
   const fetchDashboardData = useCallback(async () => {
@@ -37,6 +38,10 @@ export default function DashboardPage() {
       const docRes = await doctorsApi.list({ limit: 1 });
       const doctorCount = docRes.data.pagination?.total || 0;
 
+      // Fetch recent appointments for activity feed
+      const recentRes = await appointApi.list({ limit: 5 });
+      setRecentActivity(recentRes.data.data || []);
+
       setStats({
         todayAppointments: todayAppts.length,
         activePatients: patientCount,
@@ -49,7 +54,7 @@ export default function DashboardPage() {
       setLoading(false);
       setLoadingSchedule(false);
     }
-  }, [user?.role]);
+  }, [user]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -134,9 +139,36 @@ export default function DashboardPage() {
 
         <div className={`card ${styles.panel}`}>
           <h3 className={styles.panelTitle}>Recent Activity</h3>
-          <p className="text-muted" style={{ marginTop: 'var(--space-4)' }}>
-            Audit log feed will appear here in Phase 4.
-          </p>
+          {recentActivity.length === 0 ? (
+            <p className="text-muted" style={{ marginTop: 'var(--space-4)' }}>
+              No recent clinic activity recorded.
+            </p>
+          ) : (
+            <div style={{ marginTop: 'var(--space-4)' }}>
+              {recentActivity.map((item) => (
+                <div
+                  key={item.appointment_id}
+                  className="flex justify-between items-center"
+                  style={{
+                    padding: 'var(--space-3) 0',
+                    borderBottom: '1px solid var(--color-border)',
+                  }}
+                >
+                  <div>
+                    <p className="font-medium text-sm">
+                      {item.patient?.name || 'Patient'} · #{item.appointment_id}
+                    </p>
+                    <p className="text-xs text-muted">
+                      Dr. {item.doctor?.name || 'Practitioner'} · {formatTime(item.date_time)}
+                    </p>
+                  </div>
+                  <span className={`badge badge-${item.status === 'scheduled' ? 'warning' : item.status === 'completed' ? 'success' : 'danger'}`}>
+                    {item.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
