@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { appointApi, doctorsApi, patientsApi } from '../api/client';
+import { appointApi, doctorsApi, patientsApi, notificationsApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
 import toast from 'react-hot-toast';
@@ -114,6 +114,15 @@ export default function AppointmentsPage() {
     }
   };
 
+  const handleSendReminder = async (apt) => {
+    try {
+      const { data } = await notificationsApi.sendReminder(apt.appointment_id);
+      toast.success(data.message || 'Reminder notification queued');
+    } catch (err) {
+      toast.error(err.message || 'Failed to send reminder');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -196,6 +205,16 @@ export default function AppointmentsPage() {
         <div className="flex gap-2">
           {canWrite && row.status !== 'cancelled' && (
             <>
+              {row.status === 'scheduled' && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleSendReminder(row)}
+                  type="button"
+                  title="Send reminder to patient"
+                >
+                  Remind
+                </button>
+              )}
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => handleEdit(row)}
