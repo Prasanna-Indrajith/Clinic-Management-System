@@ -33,7 +33,13 @@ export default function AppLayout() {
 
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => !item.roles || (user?.role && item.roles.includes(user.role))
-  );
+  ).map((item) => {
+    if (user?.role === 'patient') {
+      if (item.to === '/dashboard') return { ...item, label: 'My Portal' };
+      if (item.to === '/appointments') return { ...item, label: 'My Appointments' };
+    }
+    return item;
+  });
 
   return (
     <div className={styles.shell}>

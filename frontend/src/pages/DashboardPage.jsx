@@ -22,32 +22,45 @@ export default function DashboardPage() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      // Fetch today's appointments
-      const aptRes = await appointApi.list({ date: today, limit: 100 });
-      const todayAppts = aptRes.data.data || [];
-      setTodaySchedule(todayAppts);
+      if (user?.role === 'patient') {
+        const myApptsRes = await appointApi.list({ limit: 100 });
+        const myAppts = myApptsRes.data.data || [];
+        setTodaySchedule(myAppts.filter((a) => a.status === 'scheduled'));
+        setRecentActivity(myAppts.filter((a) => a.status !== 'scheduled'));
+        setStats({
+          todayAppointments: myAppts.filter((a) => a.status === 'scheduled').length,
+          activePatients: myAppts.filter((a) => a.status === 'completed').length,
+          doctorsOnDuty: new Set(myAppts.map((a) => a.doctor_id)).size,
+          pendingReports: myAppts.length,
+        });
+      } else {
+        // Fetch today's appointments for clinic staff
+        const aptRes = await appointApi.list({ date: today, limit: 100 });
+        const todayAppts = aptRes.data.data || [];
+        setTodaySchedule(todayAppts);
 
-      // Fetch total patients (admin only sees all)
-      let patientCount = 0;
-      if (user?.role === 'admin') {
-        const patRes = await patientsApi.list({ limit: 1 });
-        patientCount = patRes.data.pagination?.total || 0;
+        // Fetch total patients (admin only sees all)
+        let patientCount = 0;
+        if (user?.role === 'admin') {
+          const patRes = await patientsApi.list({ limit: 1 });
+          patientCount = patRes.data.pagination?.total || 0;
+        }
+
+        // Fetch total doctors
+        const docRes = await doctorsApi.list({ limit: 1 });
+        const doctorCount = docRes.data.pagination?.total || 0;
+
+        // Fetch recent appointments for activity feed
+        const recentRes = await appointApi.list({ limit: 5 });
+        setRecentActivity(recentRes.data.data || []);
+
+        setStats({
+          todayAppointments: todayAppts.length,
+          activePatients: patientCount,
+          doctorsOnDuty: doctorCount,
+          pendingReports: todayAppts.filter((a) => a.status === 'scheduled').length,
+        });
       }
-
-      // Fetch total doctors
-      const docRes = await doctorsApi.list({ limit: 1 });
-      const doctorCount = docRes.data.pagination?.total || 0;
-
-      // Fetch recent appointments for activity feed
-      const recentRes = await appointApi.list({ limit: 5 });
-      setRecentActivity(recentRes.data.data || []);
-
-      setStats({
-        todayAppointments: todayAppts.length,
-        activePatients: patientCount,
-        doctorsOnDuty: doctorCount,
-        pendingReports: todayAppts.filter((a) => a.status === 'scheduled').length,
-      });
     } catch (err) {
       toast.error(err.message || 'Failed to load dashboard data');
     } finally {
@@ -68,20 +81,30 @@ export default function DashboardPage() {
     });
   };
 
-  const statCards = [
-    { label: "Today's Appointments", value: loading ? '—' : stats.todayAppointments, accent: 'teal' },
-    { label: 'Active Patients', value: loading ? '—' : stats.activePatients, accent: 'teal' },
-    { label: 'Doctors on Duty', value: loading ? '—' : stats.doctorsOnDuty, accent: 'teal' },
-    { label: 'Pending Reports', value: loading ? '—' : stats.pendingReports, accent: 'amber' },
-  ];
+  const isPatient = user?.role === 'patient';
+  const statCards = isPatient
+    ? [
+        { label: 'Upcoming Appointments', value: loading ? '—' : stats.todayAppointments, accent: 'teal' },
+        { label: 'Completed Visits', value: loading ? '—' : stats.activePatients, accent: 'teal' },
+        { label: 'Consulted Doctors', value: loading ? '—' : stats.doctorsOnDuty, accent: 'teal' },
+        { label: 'Total Records', value: loading ? '—' : stats.pendingReports, accent: 'amber' },
+      ]
+    : [
+        { label: "Today's Appointments", value: loading ? '—' : stats.todayAppointments, accent: 'teal' },
+        { label: 'Active Patients', value: loading ? '—' : stats.activePatients, accent: 'teal' },
+        { label: 'Doctors on Duty', value: loading ? '—' : stats.doctorsOnDuty, accent: 'teal' },
+        { label: 'Pending Reports', value: loading ? '—' : stats.pendingReports, accent: 'amber' },
+      ];
 
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h2 className={styles.title}>Dashboard</h2>
+          <h2 className={styles.title}>{isPatient ? 'Patient Portal' : 'Dashboard'}</h2>
           <p className={styles.subtitle}>
-            {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            {isPatient
+              ? `Welcome back, ${user?.name || 'Patient'} — your clinical appointments & records`
+              : new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
         <span className="badge badge-info" style={{ textTransform: 'capitalize' }}>
@@ -102,14 +125,14 @@ export default function DashboardPage() {
       {/* Today's Schedule */}
       <div className={styles.panels}>
         <div className={`card ${styles.panel}`}>
-          <h3 className={styles.panelTitle}>Today's Schedule</h3>
+          <h3 className={styles.panelTitle}>{isPatient ? 'Upcoming Appointments' : "Today's Schedule"}</h3>
           {loadingSchedule ? (
             <div className="flex justify-center items-center" style={{ padding: 'var(--space-8)' }}>
               <div className="spinner" style={{ width: 24, height: 24 }} />
             </div>
           ) : todaySchedule.length === 0 ? (
             <p className="text-muted" style={{ marginTop: 'var(--space-4)' }}>
-              No appointments scheduled for today.
+              {isPatient ? 'No upcoming appointments scheduled.' : 'No appointments scheduled for today.'}
             </p>
           ) : (
             <div style={{ marginTop: 'var(--space-4)' }}>
@@ -123,9 +146,9 @@ export default function DashboardPage() {
                   }}
                 >
                   <div>
-                    <p className="font-medium">{apt.patient?.name || 'Unknown Patient'}</p>
+                    <p className="font-medium">{isPatient ? `Dr. ${apt.doctor?.name || 'Doctor'}` : (apt.patient?.name || 'Unknown Patient')}</p>
                     <p className="text-sm text-muted">
-                      Dr. {apt.doctor?.name || 'Unknown'} · {formatTime(apt.date_time)}
+                      {isPatient ? apt.doctor?.specialization : `Dr. ${apt.doctor?.name || 'Unknown'}`} · {formatTime(apt.date_time)}
                     </p>
                   </div>
                   <span className={`badge badge-${apt.status === 'scheduled' ? 'warning' : apt.status === 'completed' ? 'success' : 'danger'}`}>
@@ -138,10 +161,10 @@ export default function DashboardPage() {
         </div>
 
         <div className={`card ${styles.panel}`}>
-          <h3 className={styles.panelTitle}>Recent Activity</h3>
+          <h3 className={styles.panelTitle}>{isPatient ? 'Visit History' : 'Recent Activity'}</h3>
           {recentActivity.length === 0 ? (
             <p className="text-muted" style={{ marginTop: 'var(--space-4)' }}>
-              No recent clinic activity recorded.
+              {isPatient ? 'No previous visits recorded.' : 'No recent clinic activity recorded.'}
             </p>
           ) : (
             <div style={{ marginTop: 'var(--space-4)' }}>

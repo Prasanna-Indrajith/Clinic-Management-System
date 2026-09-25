@@ -30,6 +30,7 @@ export default function AppointmentsPage() {
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [loadingPatients, setLoadingPatients] = useState(false);
 
+  const isPatient = user?.role === 'patient';
   const canWrite = user?.role === 'admin' || user?.role === 'doctor' || user?.role === 'receptionist';
 
   const fetchAppointments = useCallback(async () => {
@@ -231,6 +232,18 @@ export default function AppointmentsPage() {
               </button>
             </>
           )}
+          {isPatient && row.status === 'scheduled' && (
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => handleCancel(row)}
+              type="button"
+            >
+              Cancel
+            </button>
+          )}
+          {isPatient && row.status !== 'scheduled' && (
+            <span className="text-sm text-muted">Read-only</span>
+          )}
         </div>
       ),
     },
@@ -241,10 +254,12 @@ export default function AppointmentsPage() {
       <div className="flex justify-between items-center" style={{ marginBottom: 'var(--space-6)' }}>
         <div>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 600 }}>
-            Appointments
+            {isPatient ? 'My Appointments & History' : 'Appointments'}
           </h2>
           <p className="text-muted" style={{ marginTop: 'var(--space-1)' }}>
-            Book, view, and manage clinic appointments
+            {isPatient
+              ? 'View your upcoming appointments and healthcare visit records'
+              : 'Book, view, and manage clinic appointments'}
           </p>
         </div>
         {canWrite && (
