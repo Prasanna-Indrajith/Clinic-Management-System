@@ -4,7 +4,7 @@ import { patientsApi, medicalRecordsApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
 import toast from 'react-hot-toast';
-
+import styles from './PatientsPage.module.css';
 
 export default function PatientsPage() {
   const { user } = useAuth();
@@ -161,38 +161,64 @@ export default function PatientsPage() {
   };
 
   const columns = [
-    { key: 'name', label: 'Name', sortable: true },
-    { key: 'dob', label: 'DOB', sortable: true },
+    {
+      key: 'name',
+      label: 'Patient Name',
+      sortable: true,
+      render: (val) => (
+        <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>
+          {val}
+        </span>
+      ),
+    },
+    { key: 'dob', label: 'Date of Birth', sortable: true },
     { key: 'contact', label: 'Contact', sortable: true },
     {
       key: 'patient_id',
       label: 'Actions',
       sortable: false,
       render: (_, row) => (
-        <div className="flex gap-2">
+        <div className={styles.actionGroup}>
           {canAccessRecords && (
             <button
-              className="btn btn-secondary btn-sm"
+              className={`${styles.actionBtn} ${styles.actionBtnSecondary}`}
               onClick={() => handleViewRecords(row)}
               type="button"
+              title="View & add medical records"
             >
-              Records
+              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+              </svg>
+              <span>Records</span>
             </button>
           )}
           <button
-            className="btn btn-ghost btn-sm"
+            className={`${styles.actionBtn} ${styles.actionBtnGhost}`}
             onClick={() => handleEdit(row)}
             type="button"
+            title="Edit patient profile"
           >
-            Edit
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            <span>Edit</span>
           </button>
           {canWrite && (
             <button
-              className="btn btn-danger btn-sm"
+              className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
               onClick={() => handleDelete(row)}
               type="button"
+              title="Delete patient"
             >
-              Delete
+              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span>Delete</span>
             </button>
           )}
         </div>
@@ -202,30 +228,40 @@ export default function PatientsPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center" style={{ marginBottom: 'var(--space-6)' }}>
+      {/* ── Page Header ──────────────────────────────────────────────────── */}
+      <div className={styles.pageHeader}>
         <div>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 600 }}>
-            Patients
-          </h2>
-          <p className="text-muted" style={{ marginTop: 'var(--space-1)' }}>
-            Manage patient records — {user?.role === 'admin' ? 'full CRUD access' : 'read-only view'}
+          <h1 className={styles.headerTitle}>Patients</h1>
+          <p className={styles.headerSubtitle}>
+            Manage patient records — {user?.role === 'admin' ? 'full administrative CRUD access' : 'clinical directory view'}
           </p>
         </div>
         {canWrite && (
-          <button className="btn btn-primary" onClick={handleAdd} type="button">
-            + Add Patient
+          <button className={`btn btn-primary ${styles.headerBtn}`} onClick={handleAdd} type="button">
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>Add Patient</span>
           </button>
         )}
       </div>
 
-      <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-        <input
-          type="text"
-          className="form-input"
-          placeholder="Search patients by name or contact..."
-          value={search}
-          onChange={handleSearch}
-        />
+      {/* ── Search Bar Card ───────────────────────────────────────────────── */}
+      <div className={styles.searchCard}>
+        <div className={styles.searchWrapper}>
+          <svg className={styles.searchIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            className={`form-input ${styles.searchInput}`}
+            placeholder="Search patients by name, contact number, or ID..."
+            value={search}
+            onChange={handleSearch}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -241,13 +277,14 @@ export default function PatientsPage() {
         />
       )}
 
+      {/* ── Add / Edit Patient Modal ─────────────────────────────────────── */}
       <Modal
         isOpen={modalOpen}
         title={modalMode === 'add' ? 'Add New Patient' : 'Edit Patient'}
         onClose={() => setModalOpen(false)}
         size="md"
       >
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} noValidate className={styles.modalForm}>
           <div className="form-group">
             <label className="form-label" htmlFor="name">Full Name</label>
             <input
@@ -262,31 +299,33 @@ export default function PatientsPage() {
             {formErrors.name && <span className="form-error" role="alert">{formErrors.name}</span>}
           </div>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="dob">Date of Birth</label>
-            <input
-              id="dob"
-              name="dob"
-              type="date"
-              className={`form-input ${formErrors.dob ? 'error' : ''}`}
-              defaultValue={selectedPatient?.dob ? new Date(selectedPatient.dob).toISOString().split('T')[0] : ''}
-              required
-            />
-            {formErrors.dob && <span className="form-error" role="alert">{formErrors.dob}</span>}
-          </div>
+          <div className={styles.modalGrid}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="dob">Date of Birth</label>
+              <input
+                id="dob"
+                name="dob"
+                type="date"
+                className={`form-input ${formErrors.dob ? 'error' : ''}`}
+                defaultValue={selectedPatient?.dob ? new Date(selectedPatient.dob).toISOString().split('T')[0] : ''}
+                required
+              />
+              {formErrors.dob && <span className="form-error" role="alert">{formErrors.dob}</span>}
+            </div>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="contact">Contact Number</label>
-            <input
-              id="contact"
-              name="contact"
-              type="tel"
-              className={`form-input ${formErrors.contact ? 'error' : ''}`}
-              placeholder="e.g. 555-1234"
-              defaultValue={selectedPatient?.contact || ''}
-              required
-            />
-            {formErrors.contact && <span className="form-error" role="alert">{formErrors.contact}</span>}
+            <div className="form-group">
+              <label className="form-label" htmlFor="contact">Contact Number</label>
+              <input
+                id="contact"
+                name="contact"
+                type="tel"
+                className={`form-input ${formErrors.contact ? 'error' : ''}`}
+                placeholder="e.g. 555-1234"
+                defaultValue={selectedPatient?.contact || ''}
+                required
+              />
+              {formErrors.contact && <span className="form-error" role="alert">{formErrors.contact}</span>}
+            </div>
           </div>
 
           <div className="form-group">
@@ -296,35 +335,35 @@ export default function PatientsPage() {
               name="address"
               className="form-input"
               placeholder="Street address (optional)"
-              rows={3}
+              rows={2}
               defaultValue={selectedPatient?.address || ''}
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="notes">Notes</label>
+            <label className="form-label" htmlFor="notes">Clinical Notes</label>
             <textarea
               id="notes"
               name="notes"
               className="form-input"
-              placeholder="Medical notes (optional)"
+              placeholder="Allergies, chronic conditions, or background notes..."
               rows={3}
               defaultValue={selectedPatient?.notes || ''}
             />
           </div>
 
-          <div className="flex justify-between" style={{ marginTop: 'var(--space-6)' }}>
+          <div className={styles.modalFooter}>
             <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>
               Cancel
             </button>
             <button type="submit" className="btn btn-primary">
-              {modalMode === 'add' ? 'Create Patient' : 'Save Changes'}
+              {modalMode === 'add' ? 'Create Patient Record' : 'Save Changes'}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Medical Records Modal */}
+      {/* ── Medical Records Modal ────────────────────────────────────────── */}
       <Modal
         isOpen={recordsModalOpen}
         title={`Medical Records — ${recordsPatient?.name || 'Patient'}`}
@@ -337,26 +376,18 @@ export default function PatientsPage() {
               <div className="spinner" style={{ width: 28, height: 28 }} />
             </div>
           ) : medicalRecords.length === 0 ? (
-            <div className="card" style={{ textAlign: 'center', padding: 'var(--space-6)', background: 'var(--color-bg-subtle)' }}>
+            <div className="card" style={{ textAlign: 'center', padding: 'var(--space-6)', background: 'var(--color-surface-2)' }}>
               <p className="text-muted">No medical records recorded for this patient yet.</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+            <div className={styles.recordsList}>
               {medicalRecords.map((rec) => (
-                <div
-                  key={rec.record_id}
-                  className="card"
-                  style={{
-                    padding: 'var(--space-4)',
-                    borderLeft: '4px solid var(--color-primary)',
-                    background: 'var(--color-surface)',
-                  }}
-                >
-                  <div className="flex justify-between items-center" style={{ marginBottom: 'var(--space-2)' }}>
-                    <span className="font-semibold text-sm" style={{ color: 'var(--color-text)' }}>
-                      Dr. {rec.doctor?.name || 'Practitioner'}
+                <div key={rec.record_id} className={styles.recordCard}>
+                  <div className={styles.recordHeader}>
+                    <span className={styles.recordDiagnosis}>
+                      {rec.diagnosis}
                     </span>
-                    <span className="text-xs text-muted">
+                    <span className={styles.recordDate}>
                       {new Date(rec.created_at).toLocaleDateString('en-GB', {
                         day: 'numeric',
                         month: 'short',
@@ -364,21 +395,18 @@ export default function PatientsPage() {
                       })}
                     </span>
                   </div>
-                  <div style={{ marginBottom: 'var(--space-2)' }}>
-                    <span className="text-xs font-semibold text-muted uppercase">Diagnosis:</span>
-                    <p style={{ marginTop: '2px', fontWeight: 500 }}>{rec.diagnosis}</p>
+                  <div className="text-xs text-muted">
+                    Attending Physician: Dr. {rec.doctor?.name || 'Staff Practitioner'}
                   </div>
                   {rec.prescription && (
-                    <div style={{ marginBottom: 'var(--space-2)' }}>
-                      <span className="text-xs font-semibold text-muted uppercase">Prescription:</span>
-                      <p style={{ marginTop: '2px', whiteSpace: 'pre-wrap' }}>{rec.prescription}</p>
+                    <div>
+                      <span className={styles.recordPrescription}>
+                        Rx: {rec.prescription}
+                      </span>
                     </div>
                   )}
                   {rec.notes && (
-                    <div>
-                      <span className="text-xs font-semibold text-muted uppercase">Notes:</span>
-                      <p className="text-muted text-sm" style={{ marginTop: '2px', whiteSpace: 'pre-wrap' }}>{rec.notes}</p>
-                    </div>
+                    <p className={styles.recordNotes}>{rec.notes}</p>
                   )}
                 </div>
               ))}
@@ -386,9 +414,9 @@ export default function PatientsPage() {
           )}
 
           {canAccessRecords && (
-            <div className="card" style={{ marginTop: 'var(--space-4)', background: 'var(--color-bg-subtle)', padding: 'var(--space-4)' }}>
-              <h4 style={{ fontSize: 'var(--text-md)', fontWeight: 600, marginBottom: 'var(--space-3)' }}>
-                Add Clinical Entry
+            <div className="card" style={{ marginTop: 'var(--space-4)', background: 'var(--color-surface-2)', padding: 'var(--space-4)' }}>
+              <h4 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 'var(--space-3)', color: 'var(--color-text)' }}>
+                Add New Clinical Entry
               </h4>
               <form onSubmit={handleAddRecord}>
                 <div className="form-group" style={{ marginBottom: 'var(--space-3)' }}>

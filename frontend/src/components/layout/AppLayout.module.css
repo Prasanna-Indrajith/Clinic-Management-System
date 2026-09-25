@@ -37,10 +37,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-display);
-  font-weight: var(--font-bold);
-  font-size: var(--text-sm);
   flex-shrink: 0;
+  box-shadow: 0 2px 8px var(--color-accent-glow);
+}
+
+.logoMark svg {
+  width: 22px;
+  height: 22px;
+  stroke: var(--color-base);
+  stroke-width: 2.2;
+  fill: none;
 }
 
 .logoText {
@@ -79,13 +85,30 @@
 .navItemActive {
   background: var(--color-accent-glow);
   color: var(--color-accent);
+  font-weight: var(--font-semi);
 }
 .navItemActive:hover {
   background: var(--color-accent-glow);
   color: var(--color-accent);
 }
 
-.navIcon { font-size: var(--text-base); width: 20px; text-align: center; }
+.navIcon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.navIcon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  transition: stroke var(--transition-fast);
+}
 
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .sidebarFooter {
@@ -106,8 +129,8 @@
 }
 
 .userAvatar {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   background: var(--color-accent-glow);
   color: var(--color-accent);
   border-radius: var(--radius-full);
@@ -116,8 +139,15 @@
   justify-content: center;
   font-family: var(--font-display);
   font-weight: var(--font-bold);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   flex-shrink: 0;
+  border: 1px solid rgba(56, 178, 172, 0.3);
+}
+
+.userText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .userName {
@@ -137,19 +167,30 @@
 
 .logoutBtn {
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--color-text-dim);
-  font-size: var(--text-lg);
   cursor: pointer;
   padding: var(--space-2);
-  border-radius: var(--radius-sm);
-  transition: color var(--transition-fast), background var(--transition-fast);
-  line-height: 1;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
+
+.logoutBtn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+
 .logoutBtn:hover {
   color: var(--color-danger);
   background: var(--color-danger-bg);
+  border-color: rgba(252, 92, 101, 0.2);
 }
 
 /* ── Main ────────────────────────────────────────────────────────────────── */

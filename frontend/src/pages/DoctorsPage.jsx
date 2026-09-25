@@ -2,6 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { doctorsApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
 import toast from 'react-hot-toast';
+import styles from './DoctorsPage.module.css';
+
+function getInitials(name) {
+  if (!name) return 'DR';
+  const clean = name.replace(/^Dr\.\s*/i, '').trim();
+  const parts = clean.split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return clean.slice(0, 2).toUpperCase();
+}
 
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState([]);
@@ -35,31 +46,70 @@ export default function DoctorsPage() {
   };
 
   const columns = [
-    { key: 'name', label: 'Name', sortable: true },
-    { key: 'specialization', label: 'Specialization', sortable: true },
-    { key: 'contact', label: 'Contact', sortable: true },
-    { key: 'email', label: 'Email', sortable: true },
+    {
+      key: 'name',
+      label: 'Physician Name',
+      sortable: true,
+      render: (val) => (
+        <div className={styles.doctorCell}>
+          <div className={styles.doctorAvatar}>
+            {getInitials(val)}
+          </div>
+          <span className={styles.doctorName}>
+            {val?.startsWith('Dr.') ? val : `Dr. ${val}`}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'specialization',
+      label: 'Specialty & Department',
+      sortable: true,
+      render: (val) => (
+        <span className={styles.specBadge}>
+          {val || 'General Medicine'}
+        </span>
+      ),
+    },
+    {
+      key: 'contact',
+      label: 'Phone Contact',
+      sortable: true,
+      render: (val) => <span style={{ fontFamily: 'monospace', fontSize: 'var(--text-xs)' }}>{val || '—'}</span>,
+    },
+    {
+      key: 'email',
+      label: 'Clinic Email',
+      sortable: true,
+      render: (val) => <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)' }}>{val || '—'}</span>,
+    },
   ];
 
   return (
     <div>
-      <div style={{ marginBottom: 'var(--space-6)' }}>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 600 }}>
-          Doctors
-        </h2>
-        <p className="text-muted" style={{ marginTop: 'var(--space-1)' }}>
-          Clinic physician roster and specialties.
-        </p>
+      <div className={styles.pageHeader}>
+        <div>
+          <h1 className={styles.headerTitle}>Physician Roster</h1>
+          <p className={styles.headerSubtitle}>
+            Specialist directory, contact lines, and medical department affiliations
+          </p>
+        </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-        <input
-          type="text"
-          className="form-input"
-          placeholder="Search doctors by name, specialization, or email..."
-          value={search}
-          onChange={handleSearch}
-        />
+      <div className={styles.searchCard}>
+        <div className={styles.searchWrapper}>
+          <svg className={styles.searchIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            className={`form-input ${styles.searchInput}`}
+            placeholder="Search physicians by name, clinical specialty, or email..."
+            value={search}
+            onChange={handleSearch}
+          />
+        </div>
       </div>
 
       {loading ? (

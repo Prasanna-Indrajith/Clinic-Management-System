@@ -1,0 +1,95 @@
+/* ─── Doctors Page Styles ─────────────────────────────────────────────── */
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.headerTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.headerSubtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+.searchCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-6);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+.searchWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--space-3);
+  width: 18px;
+  height: 18px;
+  stroke: var(--color-text-dim);
+  stroke-width: 2;
+  fill: none;
+  pointer-events: none;
+}
+
+.searchInput {
+  padding-left: 2.5rem !important;
+}
+
+.doctorCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.doctorAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-glow);
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  font-family: var(--font-display);
+  border: 1px solid rgba(56, 178, 172, 0.3);
+  flex-shrink: 0;
+}
+
+.doctorName {
+  font-weight: var(--font-medium);
+  color: var(--color-text);
+}
+
+.specBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-full);
+  background: var(--color-accent-glow);
+  color: var(--color-accent);
+  border: 1px solid rgba(56, 178, 172, 0.25);
+}

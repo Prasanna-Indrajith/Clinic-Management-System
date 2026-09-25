@@ -4,6 +4,7 @@ import { appointApi, doctorsApi, patientsApi, notificationsApi } from '../api/cl
 import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
 import toast from 'react-hot-toast';
+import styles from './AppointmentsPage.module.css';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -183,66 +184,116 @@ export default function AppointmentsPage() {
     });
   };
 
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'scheduled':
+        return <span className={`${styles.statusBadge} ${styles.statusBadgeScheduled}`}>Scheduled</span>;
+      case 'completed':
+        return <span className={`${styles.statusBadge} ${styles.statusBadgeCompleted}`}>Completed</span>;
+      case 'cancelled':
+        return <span className={`${styles.statusBadge} ${styles.statusBadgeCancelled}`}>Cancelled</span>;
+      default:
+        return <span className="badge badge-info">{status}</span>;
+    }
+  };
+
   const columns = [
-    { key: 'patient', label: 'Patient', sortable: false, render: (_, row) => row.patient?.name || '—' },
-    { key: 'doctor', label: 'Doctor', sortable: false, render: (_, row) => row.doctor?.name || '—' },
+    {
+      key: 'patient',
+      label: 'Patient',
+      sortable: false,
+      render: (_, row) => (
+        <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>
+          {row.patient?.name || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'doctor',
+      label: 'Doctor',
+      sortable: false,
+      render: (_, row) => (
+        <span style={{ color: 'var(--color-text-muted)' }}>
+          {row.doctor?.name ? `Dr. ${row.doctor.name}` : '—'}
+        </span>
+      ),
+    },
     { key: 'date_time', label: 'Date', sortable: false, render: (val) => formatDate(val) },
-    { key: 'date_time', label: 'Time', sortable: false, render: (val) => formatTime(val) },
+    {
+      key: 'date_time',
+      label: 'Time',
+      sortable: false,
+      render: (val) => <span className={styles.timePill}>{formatTime(val)}</span>,
+    },
     {
       key: 'status',
       label: 'Status',
       sortable: true,
-      render: (val) => (
-        <span className={`badge badge-${val === 'scheduled' ? 'warning' : val === 'completed' ? 'success' : 'danger'}`}>
-          {val}
-        </span>
-      ),
+      render: (val) => getStatusBadge(val),
     },
     {
       key: 'appointment_id',
       label: 'Actions',
       sortable: false,
       render: (_, row) => (
-        <div className="flex gap-2">
+        <div className={styles.actionGroup}>
           {canWrite && row.status !== 'cancelled' && (
             <>
               {row.status === 'scheduled' && (
                 <button
-                  className="btn btn-secondary btn-sm"
+                  className={`${styles.actionBtn} ${styles.actionBtnSecondary}`}
                   onClick={() => handleSendReminder(row)}
                   type="button"
                   title="Send reminder to patient"
                 >
-                  Remind
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                  <span>Remind</span>
                 </button>
               )}
               <button
-                className="btn btn-ghost btn-sm"
+                className={`${styles.actionBtn} ${styles.actionBtnGhost}`}
                 onClick={() => handleEdit(row)}
                 type="button"
+                title="Edit appointment details"
               >
-                Edit
+                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <span>Edit</span>
               </button>
               <button
-                className="btn btn-danger btn-sm"
+                className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
                 onClick={() => handleCancel(row)}
                 type="button"
+                title="Cancel appointment"
               >
-                Cancel
+                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                <span>Cancel</span>
               </button>
             </>
           )}
           {isPatient && row.status === 'scheduled' && (
             <button
-              className="btn btn-danger btn-sm"
+              className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
               onClick={() => handleCancel(row)}
               type="button"
             >
-              Cancel
+              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              <span>Cancel</span>
             </button>
           )}
           {isPatient && row.status !== 'scheduled' && (
-            <span className="text-sm text-muted">Read-only</span>
+            <span className="text-xs text-muted">Read-only</span>
           )}
         </div>
       ),
@@ -251,29 +302,34 @@ export default function AppointmentsPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center" style={{ marginBottom: 'var(--space-6)' }}>
+      {/* ── Page Header ──────────────────────────────────────────────────── */}
+      <div className={styles.pageHeader}>
         <div>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 600 }}>
+          <h1 className={styles.headerTitle}>
             {isPatient ? 'My Appointments & History' : 'Appointments'}
-          </h2>
-          <p className="text-muted" style={{ marginTop: 'var(--space-1)' }}>
+          </h1>
+          <p className={styles.headerSubtitle}>
             {isPatient
               ? 'View your upcoming appointments and healthcare visit records'
-              : 'Book, view, and manage clinic appointments'}
+              : 'Book, manage, reschedule, and monitor clinical appointments'}
           </p>
         </div>
         {canWrite && (
-          <button className="btn btn-primary" onClick={handleBook} type="button">
-            + Book Appointment
+          <button className={`btn btn-primary ${styles.headerBtn}`} onClick={handleBook} type="button">
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>Book Appointment</span>
           </button>
         )}
       </div>
 
-      {/* Filters */}
-      <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-        <div className="flex gap-4" style={{ flexWrap: 'wrap', gap: 'var(--space-4)' }}>
-          <div className="form-group" style={{ minWidth: 160, marginBottom: 0 }}>
-            <label className="form-label" htmlFor="filter-status">Status</label>
+      {/* ── Filters Card ─────────────────────────────────────────────────── */}
+      <div className={styles.filterCard}>
+        <div className={styles.filterGrid}>
+          <div className={styles.filterGroup}>
+            <label className={styles.filterLabel} htmlFor="filter-status">Status</label>
             <select
               id="filter-status"
               className="form-input"
@@ -286,8 +342,8 @@ export default function AppointmentsPage() {
             </select>
           </div>
 
-          <div className="form-group" style={{ minWidth: 160, marginBottom: 0 }}>
-            <label className="form-label" htmlFor="filter-date">Date</label>
+          <div className={styles.filterGroup}>
+            <label className={styles.filterLabel} htmlFor="filter-date">Date</label>
             <input
               id="filter-date"
               type="date"
@@ -298,8 +354,8 @@ export default function AppointmentsPage() {
           </div>
 
           {user?.role === 'admin' && (
-            <div className="form-group" style={{ minWidth: 160, marginBottom: 0 }}>
-              <label className="form-label" htmlFor="filter-doctor">Doctor</label>
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel} htmlFor="filter-doctor">Doctor</label>
               <select
                 id="filter-doctor"
                 className="form-input"
@@ -317,14 +373,18 @@ export default function AppointmentsPage() {
 
           <div style={{ alignSelf: 'flex-end' }}>
             <button
-              className="btn btn-ghost btn-sm"
+              className={styles.clearBtn}
               onClick={() => {
                 setFilters({ status: '', date: '', doctor_id: '' });
                 setPage(1);
               }}
               type="button"
             >
-              Clear Filters
+              <svg style={{ width: 12, height: 12, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }} viewBox="0 0 24 24">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              <span>Reset Filters</span>
             </button>
           </div>
         </div>
@@ -343,47 +403,50 @@ export default function AppointmentsPage() {
         />
       )}
 
+      {/* ── Booking / Edit Modal ─────────────────────────────────────────── */}
       <Modal
         isOpen={modalOpen}
         title={modalMode === 'book' ? 'Book New Appointment' : 'Edit Appointment'}
         onClose={() => setModalOpen(false)}
         size="lg"
       >
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="form-group">
-            <label className="form-label" htmlFor="patient_id">Patient</label>
-            <select
-              id="patient_id"
-              name="patient_id"
-              className={`form-input ${formErrors.patient_id ? 'error' : ''}`}
-              defaultValue={selectedAppointment?.patient_id || ''}
-              disabled={loadingPatients}
-              required
-            >
-              <option value="">Select a patient</option>
-              {patients.map((p) => (
-                <option key={p.patient_id} value={p.patient_id}>{p.name}</option>
-              ))}
-            </select>
-            {formErrors.patient_id && <span className="form-error" role="alert">{formErrors.patient_id}</span>}
-          </div>
+        <form onSubmit={handleSubmit} noValidate className={styles.modalForm}>
+          <div className={styles.modalGrid}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="patient_id">Patient</label>
+              <select
+                id="patient_id"
+                name="patient_id"
+                className={`form-input ${formErrors.patient_id ? 'error' : ''}`}
+                defaultValue={selectedAppointment?.patient_id || ''}
+                disabled={loadingPatients}
+                required
+              >
+                <option value="">Select a patient</option>
+                {patients.map((p) => (
+                  <option key={p.patient_id} value={p.patient_id}>{p.name}</option>
+                ))}
+              </select>
+              {formErrors.patient_id && <span className="form-error" role="alert">{formErrors.patient_id}</span>}
+            </div>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="doctor_id">Doctor</label>
-            <select
-              id="doctor_id"
-              name="doctor_id"
-              className={`form-input ${formErrors.doctor_id ? 'error' : ''}`}
-              defaultValue={selectedAppointment?.doctor_id || ''}
-              disabled={loadingDoctors}
-              required
-            >
-              <option value="">Select a doctor</option>
-              {doctors.map((d) => (
-                <option key={d.doctor_id} value={d.doctor_id}>{d.name} ({d.specialization})</option>
-              ))}
-            </select>
-            {formErrors.doctor_id && <span className="form-error" role="alert">{formErrors.doctor_id}</span>}
+            <div className="form-group">
+              <label className="form-label" htmlFor="doctor_id">Doctor</label>
+              <select
+                id="doctor_id"
+                name="doctor_id"
+                className={`form-input ${formErrors.doctor_id ? 'error' : ''}`}
+                defaultValue={selectedAppointment?.doctor_id || ''}
+                disabled={loadingDoctors}
+                required
+              >
+                <option value="">Select a doctor</option>
+                {doctors.map((d) => (
+                  <option key={d.doctor_id} value={d.doctor_id}>{d.name} ({d.specialization})</option>
+                ))}
+              </select>
+              {formErrors.doctor_id && <span className="form-error" role="alert">{formErrors.doctor_id}</span>}
+            </div>
           </div>
 
           <div className="form-group">
@@ -400,23 +463,23 @@ export default function AppointmentsPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="remarks">Remarks</label>
+            <label className="form-label" htmlFor="remarks">Clinical Remarks</label>
             <textarea
               id="remarks"
               name="remarks"
               className="form-input"
-              placeholder="Any notes for this appointment..."
+              placeholder="Clinical reason, symptoms, or special instructions..."
               rows={3}
               defaultValue={selectedAppointment?.remarks || ''}
             />
           </div>
 
-          <div className="flex justify-between" style={{ marginTop: 'var(--space-6)' }}>
+          <div className={styles.modalFooter}>
             <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>
               Cancel
             </button>
             <button type="submit" className="btn btn-primary">
-              {modalMode === 'book' ? 'Book Appointment' : 'Save Changes'}
+              {modalMode === 'book' ? 'Confirm Appointment' : 'Save Changes'}
             </button>
           </div>
         </form>
