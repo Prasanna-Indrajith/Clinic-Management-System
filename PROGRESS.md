@@ -65,11 +65,13 @@
 
 ### Phase 5 — Reporting Module (Week 5)
 - [x] Daily report endpoint (`POST /api/reports/daily`) with summary stats and appointment records
-- [x] Monthly report endpoint (`POST /api/reports/monthly`) with doctor visits breakdown
-- [x] Export options: CSV (`csv-writer`) and PDF (`pdfkit`) formats
-- [x] Reports frontend view (`ReportsPage.jsx`) with date filters, KPI cards, and direct CSV/PDF download
-- [x] Doctor-level report scoping (doctors only access their own appointments)
-- [x] **Test Cases**: `REP-01` to `REP-05` passed in `backend/__tests__/reports.test.js` (9 tests)
+- [x] Monthly report endpoint (`POST /api/reports/monthly`) with doctor and patient visits breakdown
+- [x] Streamed server-side export endpoints: `POST /api/reports/daily/export` and `POST /api/reports/monthly/export` with PDF (`pdfkit`) and CSV formats
+- [x] Role-Based Access Control: strict enforcement of Admin & Doctor permissions (Receptionist & Patient return 403 Forbidden)
+- [x] Security sanitization: sensitive fields (`password_hash`, credentials) excluded from all reports and exports
+- [x] Reports frontend view (`ReportsPage.jsx`) with date filters, KPI summary ribbons, and direct PDF/CSV downloads
+- [x] Doctor-level report scoping: doctors automatically restricted to their own assigned appointments
+- [x] **Test Cases**: `REP-01` to `REP-08` passed in `backend/__tests__/reports.test.js` (19 tests)
 
 ### Phase 6 — Security Hardening Pass (Week 5–6)
 - [x] Audited all routes for `authMiddleware` and `roleMiddleware` coverage
@@ -106,7 +108,7 @@
 ## Test Execution Summary
 
 - **Backend Test Suites**: 9 passed, 9 total (`auth`, `patients`, `appointments`, `reports`, `e2e`, `security`, `notifications`, `load`, `patientPortal`)
-- **Backend Tests**: 72 passed, 72 total
+- **Backend Tests**: 82 passed, 82 total
 - **Frontend Test Suites**: 2 passed, 2 total (`routeGuards`, `uiComponents`)
 - **Frontend Tests**: 17 passed, 17 total
-- **Overall**: 89 automated tests passing with zero failures.
+- **Overall**: 99 automated tests passing with zero failures.
