@@ -1,6 +1,7 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Outlet, NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import toast from 'react-hot-toast';
+import SignOutModal from '../auth/SignOutModal';
 import styles from './AppLayout.module.css';
 
 const NAV_ITEMS = [
@@ -87,14 +88,8 @@ function getInitials(name) {
 }
 
 export default function AppLayout() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    toast.success('Signed out');
-    navigate('/login');
-  };
+  const { user } = useAuth();
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
 
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => !item.roles || (user?.role && item.roles.includes(user.role))
@@ -148,7 +143,7 @@ export default function AppLayout() {
           <button
             id="btn-logout"
             className={styles.logoutBtn}
-            onClick={handleLogout}
+            onClick={() => setShowSignOutModal(true)}
             title="Sign out"
             aria-label="Sign out"
           >
@@ -165,6 +160,12 @@ export default function AppLayout() {
       <main className={styles.main}>
         <Outlet />
       </main>
+
+      {/* Sign Out Confirmation Modal */}
+      <SignOutModal
+        isOpen={showSignOutModal}
+        onClose={() => setShowSignOutModal(false)}
+      />
     </div>
   );
 }
