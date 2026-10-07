@@ -240,12 +240,15 @@ export default function DashboardPage() {
 
         {/* Quick Action Buttons */}
         <div className={styles.headerActions}>
-          <Link to="/appointments" className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}>
+          <Link
+            to={isPatient ? '/appointments?book=true' : '/appointments'}
+            className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
+          >
             <svg className={styles.btnIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            <span>{isPatient ? 'Book Appointment' : 'New Appointment'}</span>
+            <span>{isPatient ? 'Book Consultation' : 'New Appointment'}</span>
           </Link>
 
           {!isPatient && (
@@ -325,9 +328,18 @@ export default function DashboardPage() {
               </p>
               <p className={styles.emptyDesc}>
                 {isPatient
-                  ? 'Book a consultation with a specialist using the button above.'
+                  ? 'Book a consultation with a specialist using the button below.'
                   : 'Front desk can book new visits or review the full calendar.'}
               </p>
+              {isPatient && (
+                <Link
+                  to="/appointments?book=true"
+                  className="btn btn-primary btn-sm"
+                  style={{ marginTop: 'var(--space-3)' }}
+                >
+                  Book a Consultation
+                </Link>
+              )}
             </div>
           ) : (
             <div className={styles.queueList}>

@@ -13,6 +13,7 @@ const schema = Yup.object({
 });
 
 const DEMO_ACCOUNTS = [
+  { role: 'Patient', label: 'Patient', email: 'patient@clinic.local', pass: 'PatientPass123!' },
   { role: 'Receptionist', label: 'Reception', email: 'receptionist@clinic.local', pass: 'ReceptionPass123!' },
   { role: 'Doctor', label: 'Doctor', email: 'dr.smith@clinic.local', pass: 'DoctorPass123!' },
   { role: 'Admin', label: 'Admin', email: 'admin@clinic.local', pass: 'AdminPass123!' },

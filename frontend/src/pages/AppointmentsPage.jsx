@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { appointApi, doctorsApi, patientsApi, notificationsApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
@@ -15,6 +16,7 @@ const STATUS_OPTIONS = [
 
 export default function AppointmentsPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ status: '', date: '', doctor_id: '' });
@@ -26,6 +28,12 @@ export default function AppointmentsPage() {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [formErrors, setFormErrors] = useState({});
 
+  const [bookingDoctorId, setBookingDoctorId] = useState('');
+  const [bookingDate, setBookingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [availabilitySlots, setAvailabilitySlots] = useState([]);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+
   const [doctors, setDoctors] = useState([]);
   const [patients, setPatients] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
@@ -33,6 +41,7 @@ export default function AppointmentsPage() {
 
   const isPatient = user?.role === 'patient';
   const canWrite = user?.role === 'admin' || user?.role === 'doctor' || user?.role === 'receptionist';
+  const canBook = isPatient || canWrite;
 
   const fetchAppointments = useCallback(async () => {
     setLoading(true);
@@ -91,10 +100,54 @@ export default function AppointmentsPage() {
     setPage(1);
   };
 
+  // Check doctor availability whenever modal is open and doctor/date are selected
+  useEffect(() => {
+    if (!modalOpen || !bookingDoctorId || !bookingDate) {
+      setAvailabilitySlots([]);
+      return;
+    }
+    let isCurrent = true;
+    const fetchSlots = async () => {
+      setLoadingAvailability(true);
+      try {
+        const { data } = await doctorsApi.getAvailability(bookingDoctorId, { date: bookingDate });
+        if (isCurrent) {
+          setAvailabilitySlots(data.slots || []);
+        }
+      } catch {
+        if (isCurrent) {
+          setAvailabilitySlots([]);
+        }
+      } finally {
+        if (isCurrent) {
+          setLoadingAvailability(false);
+        }
+      }
+    };
+    fetchSlots();
+    return () => {
+      isCurrent = false;
+    };
+  }, [modalOpen, bookingDoctorId, bookingDate]);
+
+  // Support ?book=true query parameter to trigger booking modal from dashboard
+  useEffect(() => {
+    if (searchParams.get('book') === 'true') {
+      handleBook();
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('book');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams]);
+
   const handleBook = () => {
     setModalMode('book');
     setSelectedAppointment(null);
     setFormErrors({});
+    setBookingDoctorId('');
+    setBookingDate(new Date().toISOString().split('T')[0]);
+    setSelectedSlot(null);
+    setAvailabilitySlots([]);
     setModalOpen(true);
   };
 
@@ -102,6 +155,9 @@ export default function AppointmentsPage() {
     setModalMode('edit');
     setSelectedAppointment(apt);
     setFormErrors({});
+    setBookingDoctorId(apt.doctor_id ? String(apt.doctor_id) : '');
+    setBookingDate(apt.date_time ? new Date(apt.date_time).toISOString().split('T')[0] : '');
+    setSelectedSlot(null);
     setModalOpen(true);
   };
 
@@ -128,24 +184,34 @@ export default function AppointmentsPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const payload = {
-      patient_id: parseInt(formData.get('patient_id'), 10),
-      doctor_id: parseInt(formData.get('doctor_id'), 10),
-      date_time: formData.get('date_time'),
-      remarks: formData.get('remarks')?.trim() || null,
-    };
+    const doctorId = parseInt(bookingDoctorId || formData.get('doctor_id'), 10);
+    const remarks = formData.get('remarks')?.trim() || null;
+    const dateTime = selectedSlot ? selectedSlot.dateTime : formData.get('date_time');
 
     const errors = {};
-    if (!payload.patient_id || isNaN(payload.patient_id)) errors.patient_id = 'Patient is required';
-    if (!payload.doctor_id || isNaN(payload.doctor_id)) errors.doctor_id = 'Doctor is required';
-    if (!payload.date_time) errors.date_time = 'Date and time are required';
+    if (!isPatient && modalMode === 'book') {
+      const patientId = parseInt(formData.get('patient_id'), 10);
+      if (!patientId || isNaN(patientId)) errors.patient_id = 'Patient is required';
+    }
+    if (!doctorId || isNaN(doctorId)) errors.doctor_id = 'Doctor is required';
+    if (!dateTime) errors.date_time = 'Please select an available consultation slot';
+
     setFormErrors(errors);
     if (Object.keys(errors).length > 0) return;
+
+    const payload = {
+      doctor_id: doctorId,
+      date_time: dateTime,
+      remarks,
+    };
+    if (!isPatient && modalMode === 'book') {
+      payload.patient_id = parseInt(formData.get('patient_id'), 10);
+    }
 
     try {
       if (modalMode === 'book') {
         await appointApi.create(payload);
-        toast.success('Appointment booked');
+        toast.success('Appointment booked successfully!');
       } else {
         await appointApi.update(selectedAppointment.appointment_id, payload);
         toast.success('Appointment updated');
@@ -314,7 +380,7 @@ export default function AppointmentsPage() {
               : 'Book, manage, reschedule, and monitor clinical appointments'}
           </p>
         </div>
-        {canWrite && (
+        {canBook && (
           <button className={`btn btn-primary ${styles.headerBtn}`} onClick={handleBook} type="button">
             <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -406,69 +472,194 @@ export default function AppointmentsPage() {
       {/* ── Booking / Edit Modal ─────────────────────────────────────────── */}
       <Modal
         isOpen={modalOpen}
-        title={modalMode === 'book' ? 'Book New Appointment' : 'Edit Appointment'}
+        title={
+          modalMode === 'book'
+            ? isPatient
+              ? 'Book a Consultation'
+              : 'Book New Appointment'
+            : 'Edit Appointment'
+        }
         onClose={() => setModalOpen(false)}
         size="lg"
       >
         <form onSubmit={handleSubmit} noValidate className={styles.modalForm}>
-          <div className={styles.modalGrid}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="patient_id">Patient</label>
-              <select
-                id="patient_id"
-                name="patient_id"
-                className={`form-input ${formErrors.patient_id ? 'error' : ''}`}
-                defaultValue={selectedAppointment?.patient_id || ''}
-                disabled={loadingPatients}
-                required
-              >
-                <option value="">Select a patient</option>
-                {patients.map((p) => (
-                  <option key={p.patient_id} value={p.patient_id}>{p.name}</option>
-                ))}
-              </select>
-              {formErrors.patient_id && <span className="form-error" role="alert">{formErrors.patient_id}</span>}
-            </div>
+          {/* Patient Card (if logged in as patient) or Patient Dropdown (if staff) */}
+          {modalMode === 'book' && (
+            <>
+              {isPatient ? (
+                <div className={styles.patientInfoBox}>
+                  <div className={styles.patientAvatar}>
+                    {user?.name ? user.name.slice(0, 2).toUpperCase() : 'PT'}
+                  </div>
+                  <div>
+                    <div className={styles.patientName}>{user?.name}</div>
+                    <div className={styles.patientMeta}>Personal Consultation • {user?.email}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="patient_id">Patient</label>
+                  <select
+                    id="patient_id"
+                    name="patient_id"
+                    className={`form-input ${formErrors.patient_id ? 'error' : ''}`}
+                    defaultValue={selectedAppointment?.patient_id || ''}
+                    disabled={loadingPatients}
+                    required
+                  >
+                    <option value="">Select a patient</option>
+                    {patients.map((p) => (
+                      <option key={p.patient_id} value={p.patient_id}>{p.name}</option>
+                    ))}
+                  </select>
+                  {formErrors.patient_id && <span className="form-error" role="alert">{formErrors.patient_id}</span>}
+                </div>
+              )}
+            </>
+          )}
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="doctor_id">Doctor</label>
-              <select
-                id="doctor_id"
-                name="doctor_id"
-                className={`form-input ${formErrors.doctor_id ? 'error' : ''}`}
-                defaultValue={selectedAppointment?.doctor_id || ''}
-                disabled={loadingDoctors}
-                required
-              >
-                <option value="">Select a doctor</option>
-                {doctors.map((d) => (
-                  <option key={d.doctor_id} value={d.doctor_id}>{d.name} ({d.specialization})</option>
-                ))}
-              </select>
-              {formErrors.doctor_id && <span className="form-error" role="alert">{formErrors.doctor_id}</span>}
-            </div>
+          {/* Doctor Selection */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="doctor_id">Doctor & Specialist</label>
+            <select
+              id="doctor_id"
+              name="doctor_id"
+              className={`form-input ${formErrors.doctor_id ? 'error' : ''}`}
+              value={bookingDoctorId}
+              onChange={(e) => {
+                setBookingDoctorId(e.target.value);
+                setSelectedSlot(null);
+                setFormErrors((prev) => ({ ...prev, doctor_id: null }));
+              }}
+              disabled={loadingDoctors}
+              required
+            >
+              <option value="">Choose a medical specialist...</option>
+              {doctors.map((d) => (
+                <option key={d.doctor_id} value={d.doctor_id}>
+                  {d.name} — {d.specialization}
+                </option>
+              ))}
+            </select>
+            {formErrors.doctor_id && <span className="form-error" role="alert">{formErrors.doctor_id}</span>}
           </div>
 
+          {/* Consultation Date */}
           <div className="form-group">
-            <label className="form-label" htmlFor="date_time">Date & Time</label>
+            <label className="form-label" htmlFor="booking_date">Appointment Date</label>
             <input
-              id="date_time"
-              name="date_time"
-              type="datetime-local"
-              className={`form-input ${formErrors.date_time ? 'error' : ''}`}
-              defaultValue={selectedAppointment?.date_time ? new Date(selectedAppointment.date_time).toISOString().slice(0, 16) : ''}
+              id="booking_date"
+              name="booking_date"
+              type="date"
+              className="form-input"
+              min={new Date().toISOString().split('T')[0]}
+              value={bookingDate}
+              onChange={(e) => {
+                setBookingDate(e.target.value);
+                setSelectedSlot(null);
+                setFormErrors((prev) => ({ ...prev, date_time: null }));
+              }}
               required
             />
-            {formErrors.date_time && <span className="form-error" role="alert">{formErrors.date_time}</span>}
           </div>
 
+          {/* Doctor Availability Slots Grid */}
+          {bookingDoctorId && bookingDate ? (
+            <div className={styles.availabilityBox}>
+              <div className={styles.availabilityHeader}>
+                <span className={styles.availabilityTitle}>
+                  Doctor Availability Slots
+                </span>
+                <div className={styles.availabilityLegend}>
+                  <span><span className={styles.legendDotAvailable} /> Available</span>
+                  <span><span className={styles.legendDotBooked} /> Booked</span>
+                </div>
+              </div>
+
+              {loadingAvailability ? (
+                <div className={styles.availabilityLoading}>
+                  <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+                  <span>Checking doctor consultation availability...</span>
+                </div>
+              ) : availabilitySlots.length === 0 ? (
+                <div className={styles.noSlotsMessage}>
+                  No slot definitions found for this date.
+                </div>
+              ) : (
+                <div className={styles.slotGrid}>
+                  {availabilitySlots.map((slot) => {
+                    const isSelected = selectedSlot?.dateTime === slot.dateTime;
+                    return (
+                      <button
+                        key={slot.time}
+                        type="button"
+                        disabled={!slot.available}
+                        onClick={() => {
+                          setSelectedSlot(slot);
+                          setFormErrors((prev) => ({ ...prev, date_time: null }));
+                        }}
+                        className={`${styles.slotBtn} ${
+                          isSelected
+                            ? styles.slotBtnSelected
+                            : slot.available
+                            ? styles.slotBtnAvailable
+                            : styles.slotBtnBooked
+                        }`}
+                        title={slot.available ? `Book slot at ${slot.time}` : 'Booked / Unavailable'}
+                      >
+                        <span className={styles.slotTime}>{slot.time}</span>
+                        <span className={styles.slotStatus}>
+                          {slot.available ? (isSelected ? 'Selected' : 'Open') : 'Booked'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedSlot && (
+                <div className={styles.selectedSlotNotice}>
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>
+                    Selected Slot: <strong>{selectedSlot.time}</strong> on <strong>{bookingDate}</strong>
+                  </span>
+                </div>
+              )}
+
+              {formErrors.date_time && (
+                <span className="form-error" role="alert">{formErrors.date_time}</span>
+              )}
+            </div>
+          ) : (
+            <div className={styles.selectPrompt}>
+              Select a doctor and appointment date to view available consultation slots.
+            </div>
+          )}
+
+          {/* Fallback DateTime input for edit mode if rescheduling without slot picker */}
+          {modalMode === 'edit' && !selectedSlot && (
+            <div className="form-group">
+              <label className="form-label" htmlFor="date_time">Or Custom Date & Time</label>
+              <input
+                id="date_time"
+                name="date_time"
+                type="datetime-local"
+                className={`form-input ${formErrors.date_time ? 'error' : ''}`}
+                defaultValue={selectedAppointment?.date_time ? new Date(selectedAppointment.date_time).toISOString().slice(0, 16) : ''}
+              />
+            </div>
+          )}
+
+          {/* Clinical Remarks */}
           <div className="form-group">
-            <label className="form-label" htmlFor="remarks">Clinical Remarks</label>
+            <label className="form-label" htmlFor="remarks">Clinical Remarks / Symptoms</label>
             <textarea
               id="remarks"
               name="remarks"
               className="form-input"
-              placeholder="Clinical reason, symptoms, or special instructions..."
+              placeholder="Reason for consultation, current symptoms, or special clinical notes..."
               rows={3}
               defaultValue={selectedAppointment?.remarks || ''}
             />

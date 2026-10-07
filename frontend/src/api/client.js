@@ -61,6 +61,7 @@ export const patientsApi = {
 export const doctorsApi = {
   list: (params = {}) => api.get('/doctors', { params }),
   get: (id) => api.get(`/doctors/${id}`),
+  getAvailability: (id, params = {}) => api.get(`/doctors/${id}/availability`, { params }),
 };
 
 export const appointApi = {
