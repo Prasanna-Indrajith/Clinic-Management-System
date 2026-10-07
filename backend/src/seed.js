@@ -96,8 +96,12 @@ async function seed() {
         where: { email: u.email },
         defaults: u.defaults,
       });
-      if (!created && user.name !== u.defaults.name) {
-        await user.update({ name: u.defaults.name, role: u.defaults.role });
+      if (!created) {
+        await user.update({
+          name: u.defaults.name,
+          role: u.defaults.role,
+          password_hash: u.defaults.password_hash,
+        });
       }
       userMap[u.email] = user;
     }

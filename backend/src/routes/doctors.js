@@ -64,6 +64,31 @@ router.get('/:id', doctorController.getDoctorById);
 
 /**
  * @openapi
+ * /api/doctors/{id}/availability:
+ *   get:
+ *     summary: Get doctor availability slots by date
+ *     tags: [Doctors]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Doctor availability slots
+ *       404:
+ *         description: Doctor not found
+ */
+router.get('/:id/availability', doctorController.getDoctorAvailability);
+
+/**
+ * @openapi
  * /api/doctors:
  *   post:
  *     summary: Create doctor record (Admin only)

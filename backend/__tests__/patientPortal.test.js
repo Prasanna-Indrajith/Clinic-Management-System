@@ -128,4 +128,71 @@ describe('Patient Portal & IDOR Scoping (Phase 4 / SRS §3.1)', () => {
 
         expect(res.status).toBe(403);
     });
+
+    it('PORTAL-06: patient can view doctor availability for a target date', async () => {
+        const res = await request(app)
+            .get(`/api/doctors/${doctor.doctor_id}/availability?date=2026-11-20`)
+            .set('Authorization', `Bearer ${patient1Token}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveProperty('doctor');
+        expect(res.body.doctor.doctor_id).toBe(doctor.doctor_id);
+        expect(res.body.date).toBe('2026-11-20');
+        expect(Array.isArray(res.body.slots)).toBe(true);
+        expect(res.body.slots.length).toBeGreaterThan(0);
+        expect(res.body.slots[0]).toHaveProperty('time');
+        expect(res.body.slots[0]).toHaveProperty('available');
+    });
+
+    it('PORTAL-07: doctor availability reflects booked appointments', async () => {
+        // Book a specific slot for the doctor
+        const bookedDateTime = '2026-11-20T08:30:00.000Z';
+        await Appointment.create({
+            patient_id: patient2.patient_id,
+            doctor_id: doctor.doctor_id,
+            date_time: new Date(bookedDateTime),
+            status: 'scheduled',
+            remarks: 'Early morning slot',
+        });
+
+        const res = await request(app)
+            .get(`/api/doctors/${doctor.doctor_id}/availability?date=2026-11-20`)
+            .set('Authorization', `Bearer ${patient1Token}`);
+
+        expect(res.status).toBe(200);
+        const slot0830 = res.body.slots.find((s) => s.time === '08:30');
+        expect(slot0830).toBeDefined();
+        expect(slot0830.available).toBe(false);
+        expect(slot0830.reason).toBe('Booked');
+
+        const slot0930 = res.body.slots.find((s) => s.time === '09:30');
+        expect(slot0930).toBeDefined();
+        expect(slot0930.available).toBe(true);
+    });
+
+    it('PORTAL-08: patient can book appointment with doctor without passing patient_id', async () => {
+        const bookingTime = '2026-11-21T09:30:00.000Z';
+        const res = await request(app)
+            .post('/api/appointments')
+            .set('Authorization', `Bearer ${patient1Token}`)
+            .send({
+                doctor_id: doctor.doctor_id,
+                date_time: bookingTime,
+                remarks: 'Patient self-booked consultation',
+            });
+
+        expect(res.status).toBe(201);
+        expect(res.body.data.patient_id).toBe(patient1.patient_id);
+        expect(res.body.data.status).toBe('scheduled');
+    });
+
+    it('PORTAL-09: patient attempting to update another patient\'s appointment gets 403', async () => {
+        const res = await request(app)
+            .put(`/api/appointments/${appointment2.appointment_id}`)
+            .set('Authorization', `Bearer ${patient1Token}`)
+            .send({ remarks: 'Malicious modification' });
+
+        expect(res.status).toBe(403);
+        expect(res.body.error).toMatch(/forbidden/i);
+    });
 });

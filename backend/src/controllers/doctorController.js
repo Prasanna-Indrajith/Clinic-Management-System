@@ -1,6 +1,7 @@
 'use strict';
 
-const { Doctor } = require('../models');
+const { Op } = require('sequelize');
+const { Doctor, Appointment } = require('../models');
 const logger = require('../config/logger');
 
 const { buildSearchClause, getPagination } = require('../utils/search');
@@ -183,9 +184,92 @@ const deleteDoctor = async (req, res) => {
   }
 };
 
+/**
+ * Get doctor's availability slots for a specific date
+ * Query params: ?date=YYYY-MM-DD
+ */
+const getDoctorAvailability = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doctor = await Doctor.findByPk(id);
+
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    const targetDate = req.query.date || new Date().toISOString().split('T')[0];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
+    }
+
+    // Standard clinical consultation slot definitions
+    const slotDefinitions = [
+      { time: '08:30', hour: 8, minute: 30 },
+      { time: '09:30', hour: 9, minute: 30 },
+      { time: '10:45', hour: 10, minute: 45 },
+      { time: '11:45', hour: 11, minute: 45 },
+      { time: '14:00', hour: 14, minute: 0 },
+      { time: '15:15', hour: 15, minute: 15 },
+      { time: '16:30', hour: 16, minute: 30 },
+      { time: '17:30', hour: 17, minute: 30 },
+    ];
+
+    const [year, month, day] = targetDate.split('-').map(Number);
+    // Buffer query range by 12 hours on both sides to handle UTC / local timezone boundaries seamlessly
+    const queryStart = new Date(Date.UTC(year, month - 1, day - 1, 12, 0, 0, 0));
+    const queryEnd = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0, 0));
+
+    const existingAppointments = await Appointment.findAll({
+      where: {
+        doctor_id: doctor.doctor_id,
+        date_time: {
+          [Op.between]: [queryStart, queryEnd],
+        },
+        status: {
+          [Op.ne]: 'cancelled',
+        },
+      },
+      attributes: ['appointment_id', 'date_time', 'status'],
+    });
+
+    const slots = slotDefinitions.map((def) => {
+      const slotUtc = new Date(Date.UTC(year, month - 1, day, def.hour, def.minute, 0, 0));
+      // Match if existing appointment is within 25 minutes of slot timestamp
+      const isBooked = existingAppointments.some((apt) => {
+        const aptDate = new Date(apt.date_time);
+        const diffMs = Math.abs(aptDate.getTime() - slotUtc.getTime());
+        return diffMs < 25 * 60 * 1000;
+      });
+
+      return {
+        time: def.time,
+        dateTime: slotUtc.toISOString(),
+        available: !isBooked,
+        reason: isBooked ? 'Booked' : 'Available',
+      };
+    });
+
+    return res.status(200).json({
+      doctor: {
+        doctor_id: doctor.doctor_id,
+        name: doctor.name,
+        specialization: doctor.specialization,
+      },
+      date: targetDate,
+      totalSlots: slots.length,
+      availableSlotsCount: slots.filter((s) => s.available).length,
+      slots,
+    });
+  } catch (err) {
+    logger.error('Error fetching doctor availability', { message: err.message });
+    return res.status(500).json({ error: 'Failed to retrieve doctor availability' });
+  }
+};
+
 module.exports = {
   getAllDoctors,
   getDoctorById,
+  getDoctorAvailability,
   createDoctor,
   updateDoctor,
   deleteDoctor,

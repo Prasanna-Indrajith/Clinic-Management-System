@@ -15,10 +15,15 @@ const validate = (req, res, next) => {
 
 const createAppointmentValidation = [
   body('patient_id')
-    .notEmpty()
-    .withMessage('patient_id is required')
-    .isInt({ min: 1 })
-    .withMessage('patient_id must be a valid integer ID'),
+    .custom((value, { req }) => {
+      if (req.user && req.user.role === 'patient') {
+        return true;
+      }
+      if (value === undefined || value === null || value === '' || isNaN(parseInt(value, 10)) || parseInt(value, 10) < 1) {
+        throw new Error('patient_id is required');
+      }
+      return true;
+    }),
   body('doctor_id')
     .notEmpty()
     .withMessage('doctor_id is required')
