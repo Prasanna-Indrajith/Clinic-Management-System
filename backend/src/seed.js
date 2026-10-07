@@ -261,14 +261,13 @@ async function seed() {
       patients.push(patient);
     }
 
-    // 5. Generate a full month of realistic appointment dataset
-    logger.info('Generating month-long appointment schedule (50-80 appointments across current month)...');
+    // 5. Generate a multi-month dataset of realistic appointments (previous month, current month, and next month)
+    logger.info('Generating multi-month appointment schedule (September, October, and November)...');
 
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
     const currentDay = now.getDate();
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
     const timeSlots = [
       { hour: 8, minute: 30 },
@@ -354,91 +353,123 @@ async function seed() {
     let appointmentCount = 0;
     let medicalRecordCount = 0;
 
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateForDay = new Date(currentYear, currentMonth, day);
-      const dayOfWeek = dateForDay.getDay(); // 0 is Sunday, 6 is Saturday
+    const monthsToSeed = [
+      { offset: -1, name: 'Previous Month' },
+      { offset: 0, name: 'Current Month' },
+      { offset: 1, name: 'Next Month' },
+    ];
 
-      // Determine number of appointments for this day
-      let dailySlots = [];
-      if (dayOfWeek === 0) {
-        // Sunday: 1 morning appointment
-        dailySlots = [timeSlots[1]];
-      } else if (dayOfWeek === 6) {
-        // Saturday: 2 morning appointments
-        dailySlots = [timeSlots[0], timeSlots[2]];
-      } else {
-        // Weekdays: 3 or 4 appointments
-        const count = ((day % 2) === 0) ? 4 : 3;
-        dailySlots = [timeSlots[0], timeSlots[2], timeSlots[4], timeSlots[6]].slice(0, count);
-      }
+    for (const { offset } of monthsToSeed) {
+      const targetDate = new Date(currentYear, currentMonth + offset, 1);
+      const targetYear = targetDate.getFullYear();
+      const targetMonth = targetDate.getMonth();
+      const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
 
-      for (let sIdx = 0; sIdx < dailySlots.length; sIdx++) {
-        const slot = dailySlots[sIdx];
-        const apptDate = new Date(currentYear, currentMonth, day, slot.hour, slot.minute, 0, 0);
+      // Seed full days for previous and current month; first 14 days for next month
+      const maxDays = offset === 1 ? Math.min(14, daysInTargetMonth) : daysInTargetMonth;
 
-        // Select doctor and patient cyclically
-        const doctorIndex = (day + sIdx) % doctors.length;
-        const patientIndex = (day * 2 + sIdx * 3) % patients.length;
-        const selectedDoctor = doctors[doctorIndex];
-        const selectedPatient = patients[patientIndex];
+      for (let day = 1; day <= maxDays; day++) {
+        const dateForDay = new Date(targetYear, targetMonth, day);
+        const dayOfWeek = dateForDay.getDay(); // 0 is Sunday, 6 is Saturday
 
-        // Determine status based on current time
-        let status = 'scheduled';
-        let remarks = null;
-
-        if (day < currentDay) {
-          // Past days: ~85% completed, ~15% cancelled
-          const isCancelled = ((day + sIdx) % 7 === 0);
-          if (isCancelled) {
-            status = 'cancelled';
-            remarks = cancellationReasons[(day + sIdx) % cancellationReasons.length];
-          } else {
-            status = 'completed';
-            remarks = 'Consultation successfully completed. Vital signs recorded and treatment issued.';
-          }
-        } else if (day === currentDay) {
-          // Today: morning completed, afternoon scheduled
-          if (slot.hour < now.getHours() || (slot.hour === now.getHours() && slot.minute <= now.getMinutes())) {
-            status = 'completed';
-            remarks = 'Morning consultation attended on time.';
-          } else {
-            status = 'scheduled';
-            remarks = 'Checked in at reception; awaiting doctor.';
-          }
+        // Determine number of appointments for this day
+        let dailySlots = [];
+        if (dayOfWeek === 0) {
+          // Sunday: 1 morning appointment
+          dailySlots = [timeSlots[1]];
+        } else if (dayOfWeek === 6) {
+          // Saturday: 2 morning appointments
+          dailySlots = [timeSlots[0], timeSlots[2]];
         } else {
-          // Future days: scheduled
-          status = 'scheduled';
-          remarks = 'Pre-booked clinical appointment.';
+          // Weekdays: 3 or 4 appointments
+          const count = ((day % 2) === 0) ? 4 : 3;
+          dailySlots = [timeSlots[0], timeSlots[2], timeSlots[4], timeSlots[6]].slice(0, count);
         }
 
-        await Appointment.create({
-          patient_id: selectedPatient.patient_id,
-          doctor_id: selectedDoctor.doctor_id,
-          date_time: apptDate,
-          status,
-          remarks,
-        });
-        appointmentCount++;
+        for (let sIdx = 0; sIdx < dailySlots.length; sIdx++) {
+          const slot = dailySlots[sIdx];
+          const apptDate = new Date(targetYear, targetMonth, day, slot.hour, slot.minute, 0, 0);
 
-        // If completed, create a corresponding Sri Lankan medical record
-        if (status === 'completed') {
-          const context = clinicalContexts[(day + sIdx) % clinicalContexts.length];
-          const recordDateStr = apptDate.toISOString().split('T')[0];
+          // Select doctor and patient cyclically
+          const doctorIndex = (day + sIdx + Math.abs(offset) * 2) % doctors.length;
+          const patientIndex = (day * 2 + sIdx * 3 + Math.abs(offset) * 4) % patients.length;
+          const selectedDoctor = doctors[doctorIndex];
+          const selectedPatient = patients[patientIndex];
 
-          await MedicalRecord.create({
+          // Determine status based on relation to today
+          let status = 'scheduled';
+          let remarks = null;
+
+          if (offset < 0) {
+            // Previous month: strictly past completed (~88%) or cancelled (~12%)
+            const isCancelled = ((day + sIdx) % 8 === 0);
+            if (isCancelled) {
+              status = 'cancelled';
+              remarks = cancellationReasons[(day + sIdx) % cancellationReasons.length];
+            } else {
+              status = 'completed';
+              remarks = 'Consultation successfully completed. Vital signs recorded and treatment issued.';
+            }
+          } else if (offset === 0) {
+            // Current month: relative to current day
+            if (day < currentDay) {
+              const isCancelled = ((day + sIdx) % 7 === 0);
+              if (isCancelled) {
+                status = 'cancelled';
+                remarks = cancellationReasons[(day + sIdx) % cancellationReasons.length];
+              } else {
+                status = 'completed';
+                remarks = 'Consultation successfully completed. Vital signs recorded and treatment issued.';
+              }
+            } else if (day === currentDay) {
+              // Today: morning completed, afternoon scheduled
+              if (slot.hour < now.getHours() || (slot.hour === now.getHours() && slot.minute <= now.getMinutes())) {
+                status = 'completed';
+                remarks = 'Morning consultation attended on time.';
+              } else {
+                status = 'scheduled';
+                remarks = 'Checked in at reception; awaiting doctor.';
+              }
+            } else {
+              // Future days in current month: scheduled
+              status = 'scheduled';
+              remarks = 'Pre-booked clinical appointment.';
+            }
+          } else {
+            // Next month: pre-scheduled advance bookings
+            status = 'scheduled';
+            remarks = 'Advance clinical appointment booking.';
+          }
+
+          await Appointment.create({
             patient_id: selectedPatient.patient_id,
             doctor_id: selectedDoctor.doctor_id,
-            diagnosis: context.diagnosis,
-            prescription: context.prescription,
-            notes: context.notes,
-            record_date: recordDateStr,
+            date_time: apptDate,
+            status,
+            remarks,
           });
-          medicalRecordCount++;
+          appointmentCount++;
+
+          // If completed, create a corresponding Sri Lankan medical record
+          if (status === 'completed') {
+            const context = clinicalContexts[(day + sIdx) % clinicalContexts.length];
+            const recordDateStr = apptDate.toISOString().split('T')[0];
+
+            await MedicalRecord.create({
+              patient_id: selectedPatient.patient_id,
+              doctor_id: selectedDoctor.doctor_id,
+              diagnosis: context.diagnosis,
+              prescription: context.prescription,
+              notes: context.notes,
+              record_date: recordDateStr,
+            });
+            medicalRecordCount++;
+          }
         }
       }
     }
 
-    logger.info(`Successfully created ${appointmentCount} appointments across current month (${medicalRecordCount} with completed clinical records).`);
+    logger.info(`Successfully created ${appointmentCount} appointments across multi-month schedule (${medicalRecordCount} with completed clinical records).`);
 
     // 6. Seed Realistic Audit Logs
     logger.info('Seeding clinic system audit logs...');
@@ -494,7 +525,7 @@ async function seed() {
     logger.info('Doctor (Orthopedic):  dr.fernando@clinic.local    / DoctorPass123!    (Dr. Anura Fernando)');
     logger.info('Patient Account:      patient@clinic.local        / PatientPass123!   (Ruwan Bandara)');
     logger.info('---------------------------------------------------------------');
-    logger.info(`Total Appointments:  ${appointmentCount} (Spanning full month 1-${daysInMonth})`);
+    logger.info(`Total Appointments:  ${appointmentCount} (Spanning multi-month schedule)`);
     logger.info(`Completed Records:   ${medicalRecordCount} (Full medical diagnoses & prescriptions)`);
     logger.info(`Registered Patients: ${patients.length} (Sri Lankan addresses & profiles)`);
     logger.info('===============================================================');

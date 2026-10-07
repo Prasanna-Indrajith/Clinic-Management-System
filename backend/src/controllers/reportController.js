@@ -54,10 +54,9 @@ async function fetchDailyReportData(date, user) {
  */
 async function fetchMonthlyReportData(year, month, user) {
   const monthNum = parseInt(month, 10);
-  const startOfMonth = new Date(`${year}-${String(monthNum).padStart(2, '0')}-01T00:00:00.000Z`);
-  const endOfMonth = new Date(
-    new Date(startOfMonth.getFullYear(), monthNum, 0, 23, 59, 59, 999).toISOString()
-  );
+  const yearNum = parseInt(year, 10);
+  const startOfMonth = new Date(Date.UTC(yearNum, monthNum - 1, 1, 0, 0, 0, 0));
+  const endOfMonth = new Date(Date.UTC(yearNum, monthNum, 0, 23, 59, 59, 999));
 
   const whereClause = {
     date_time: { [Op.between]: [startOfMonth, endOfMonth] },
@@ -68,11 +67,13 @@ async function fetchMonthlyReportData(year, month, user) {
     const doctorProfile = await Doctor.findOne({ where: { user_id: user.id } });
     if (!doctorProfile) {
       return {
-        year: parseInt(year, 10),
+        year: yearNum,
         month: monthNum,
         summary: { total: 0, scheduled: 0, completed: 0, cancelled: 0 },
         perDoctor: [],
+        byDoctor: [],
         perPatient: [],
+        byPatient: [],
       };
     }
     whereClause.doctor_id = doctorProfile.doctor_id;
@@ -118,12 +119,17 @@ async function fetchMonthlyReportData(year, month, user) {
     cancelled: appointments.filter((a) => a.status === 'cancelled').length,
   };
 
+  const doctorList = Object.values(perDoctorMap);
+  const patientList = Object.values(perPatientMap);
+
   return {
-    year: parseInt(year, 10),
+    year: yearNum,
     month: monthNum,
     summary,
-    perDoctor: Object.values(perDoctorMap),
-    perPatient: Object.values(perPatientMap),
+    perDoctor: doctorList,
+    byDoctor: doctorList,
+    perPatient: patientList,
+    byPatient: patientList,
   };
 }
 

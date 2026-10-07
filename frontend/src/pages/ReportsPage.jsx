@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { reportsApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
@@ -66,7 +66,6 @@ export default function ReportsPage() {
     try {
       const res = await reportsApi.daily({ date: dailyDate });
       setDailyData(res.data?.data || res.data);
-      setMonthlyData(null);
     } catch (err) {
       setError(err.message || 'Failed to generate daily report');
       setDailyData(null);
@@ -85,7 +84,6 @@ export default function ReportsPage() {
     try {
       const res = await reportsApi.monthly({ year: parseInt(monthYear, 10), month: parseInt(monthMonth, 10) });
       setMonthlyData(res.data?.data || res.data);
-      setDailyData(null);
     } catch (err) {
       setError(err.message || 'Failed to generate monthly report');
       setMonthlyData(null);
@@ -93,6 +91,28 @@ export default function ReportsPage() {
       setLoadingMonthly(false);
     }
   };
+
+  // Automatically fetch reports on initial load so the page is populated immediately
+  useEffect(() => {
+    let isMounted = true;
+    if (canRead && dailyDate) {
+      reportsApi.daily({ date: dailyDate })
+        .then((res) => {
+          if (isMounted) setDailyData(res.data?.data || res.data);
+        })
+        .catch(() => {});
+    }
+    if (canRead && monthYear && monthMonth) {
+      reportsApi.monthly({ year: parseInt(monthYear, 10), month: parseInt(monthMonth, 10) })
+        .then((res) => {
+          if (isMounted) setMonthlyData(res.data?.data || res.data);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [canRead, dailyDate, monthYear, monthMonth]);
 
   const setDatePreset = (offsetDays) => {
     const d = new Date();
@@ -525,21 +545,51 @@ export default function ReportsPage() {
 
             {monthlyData && !loadingMonthly && (
               <div className={styles.resultSection}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-6)' }}>
+                {/* Metric Summary Ribbon for Monthly Activity */}
+                <div className={styles.kpiGrid}>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Total Visits</span>
+                    <span className={styles.kpiValue}>{monthlyData.summary?.total ?? 0}</span>
+                  </div>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Scheduled</span>
+                    <span className={styles.kpiValue} style={{ color: 'var(--color-warning)' }}>
+                      {monthlyData.summary?.scheduled ?? 0}
+                    </span>
+                  </div>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Completed</span>
+                    <span className={styles.kpiValue} style={{ color: 'var(--color-success)' }}>
+                      {monthlyData.summary?.completed ?? 0}
+                    </span>
+                  </div>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Cancelled</span>
+                    <span className={styles.kpiValue} style={{ color: 'var(--color-danger)' }}>
+                      {monthlyData.summary?.cancelled ?? 0}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-6)', marginTop: 'var(--space-6)' }}>
                   <div>
-                    <h3 className={styles.resultTitle}>Consultations by Physician</h3>
+                    <h3 className={styles.resultTitle}>
+                      Consultations by Physician ({((monthlyData.perDoctor || monthlyData.byDoctor || []).length)} records)
+                    </h3>
                     <DataTable
                       columns={monthlyDoctorColumns}
-                      data={monthlyData.byDoctor || []}
-                      pagination={{ page: 1, limit: 100, total: (monthlyData.byDoctor || []).length, totalPages: 1 }}
+                      data={monthlyData.perDoctor || monthlyData.byDoctor || []}
+                      pagination={{ page: 1, limit: 100, total: (monthlyData.perDoctor || monthlyData.byDoctor || []).length, totalPages: 1 }}
                     />
                   </div>
                   <div>
-                    <h3 className={styles.resultTitle}>Visits by Patient</h3>
+                    <h3 className={styles.resultTitle}>
+                      Visits by Patient ({((monthlyData.perPatient || monthlyData.byPatient || []).length)} records)
+                    </h3>
                     <DataTable
                       columns={monthlyPatientColumns}
-                      data={monthlyData.byPatient || []}
-                      pagination={{ page: 1, limit: 100, total: (monthlyData.byPatient || []).length, totalPages: 1 }}
+                      data={monthlyData.perPatient || monthlyData.byPatient || []}
+                      pagination={{ page: 1, limit: 100, total: (monthlyData.perPatient || monthlyData.byPatient || []).length, totalPages: 1 }}
                     />
                   </div>
                 </div>
