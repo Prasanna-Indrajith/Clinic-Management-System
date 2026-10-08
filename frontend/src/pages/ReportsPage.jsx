@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { reportsApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
 import toast from 'react-hot-toast';
+import styles from './ReportsPage.module.css';
 
 const MONTHS = [
   { value: '1', label: 'January' },
@@ -65,7 +66,6 @@ export default function ReportsPage() {
     try {
       const res = await reportsApi.daily({ date: dailyDate });
       setDailyData(res.data?.data || res.data);
-      setMonthlyData(null);
     } catch (err) {
       setError(err.message || 'Failed to generate daily report');
       setDailyData(null);
@@ -84,7 +84,6 @@ export default function ReportsPage() {
     try {
       const res = await reportsApi.monthly({ year: parseInt(monthYear, 10), month: parseInt(monthMonth, 10) });
       setMonthlyData(res.data?.data || res.data);
-      setDailyData(null);
     } catch (err) {
       setError(err.message || 'Failed to generate monthly report');
       setMonthlyData(null);
@@ -93,6 +92,28 @@ export default function ReportsPage() {
     }
   };
 
+  // Automatically fetch reports on initial load so the page is populated immediately
+  useEffect(() => {
+    let isMounted = true;
+    if (canRead && dailyDate) {
+      reportsApi.daily({ date: dailyDate })
+        .then((res) => {
+          if (isMounted) setDailyData(res.data?.data || res.data);
+        })
+        .catch(() => {});
+    }
+    if (canRead && monthYear && monthMonth) {
+      reportsApi.monthly({ year: parseInt(monthYear, 10), month: parseInt(monthMonth, 10) })
+        .then((res) => {
+          if (isMounted) setMonthlyData(res.data?.data || res.data);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [canRead, dailyDate, monthYear, monthMonth]);
+
   const setDatePreset = (offsetDays) => {
     const d = new Date();
     d.setDate(d.getDate() + offsetDays);
@@ -100,19 +121,19 @@ export default function ReportsPage() {
   };
 
   const downloadBlob = (blob, filename) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   };
 
   const handleExportDaily = async (format) => {
     if (!dailyDate) {
-      toast.error('Please select a date');
+      toast.error('Please select a date first');
       return;
     }
     setExportingDaily(format);
@@ -130,7 +151,7 @@ export default function ReportsPage() {
 
   const handleExportMonthly = async (format) => {
     if (!monthYear || !monthMonth) {
-      toast.error('Please select year and month');
+      toast.error('Please select year and month first');
       return;
     }
     setExportingMonthly(format);
@@ -151,6 +172,20 @@ export default function ReportsPage() {
     }
   };
 
+  const getStatusBadge = (status) => {
+    const s = (status || '').toLowerCase();
+    switch (s) {
+      case 'scheduled':
+        return <span className={`${styles.statusPill} ${styles.statusScheduled}`}>Scheduled</span>;
+      case 'completed':
+        return <span className={`${styles.statusPill} ${styles.statusCompleted}`}>Completed</span>;
+      case 'cancelled':
+        return <span className={`${styles.statusPill} ${styles.statusCancelled}`}>Cancelled</span>;
+      default:
+        return <span className="badge badge-info">{status}</span>;
+    }
+  };
+
   const dailyColumns = [
     {
       key: 'date_time',
@@ -159,39 +194,32 @@ export default function ReportsPage() {
       render: (val, row) => {
         const dt = val || row?.date_time;
         if (!dt) return '—';
-        return new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return <span style={{ fontFamily: 'monospace', fontSize: 'var(--text-xs)' }}>{new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>;
       },
     },
     {
       key: 'patient.name',
       label: 'Patient',
       sortable: true,
-      render: (val, row) => val || row?.patient?.name || '—',
+      render: (val, row) => <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>{val || row?.patient?.name || '—'}</span>,
     },
     {
       key: 'patient.contact',
       label: 'Contact',
       sortable: false,
-      render: (val, row) => val || row?.patient?.contact || '—',
+      render: (val, row) => <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{val || row?.patient?.contact || '—'}</span>,
     },
     {
       key: 'doctor.name',
       label: 'Doctor',
       sortable: true,
-      render: (val, row) => val || row?.doctor?.name || '—',
+      render: (val, row) => <span style={{ color: 'var(--color-text-muted)' }}>{val || row?.doctor?.name ? `Dr. ${val || row?.doctor?.name}` : '—'}</span>,
     },
     {
       key: 'status',
       label: 'Status',
       sortable: true,
-      render: (val, row) => {
-        const status = (val || row?.status || 'unknown').toLowerCase();
-        let badgeColor = 'badge-primary';
-        if (status === 'completed') badgeColor = 'badge-success';
-        if (status === 'cancelled') badgeColor = 'badge-error';
-        if (status === 'scheduled') badgeColor = 'badge-warning';
-        return <span className={`badge ${badgeColor}`}>{status.toUpperCase()}</span>;
-      },
+      render: (val, row) => getStatusBadge(val || row?.status),
     },
   ];
 
@@ -238,67 +266,60 @@ export default function ReportsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
+    <div className={styles.container}>
+      <div className={styles.pageHeader}>
         <div>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 600 }}>
-            Reports & Analytics
-          </h2>
-          <p className="text-muted" style={{ marginTop: 'var(--space-1)' }}>
-            Generate operational appointment reports and export high-resolution PDF / CSV documents.
+          <h1 className={styles.headerTitle}>Reports & Analytics</h1>
+          <p className={styles.headerSubtitle}>
+            Generate operational appointment reports and export high-resolution PDF or CSV documents.
           </p>
         </div>
 
         {isDoctor && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: 'var(--space-2) var(--space-4)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)', color: '#166534' }}>
-            🔒 Doctor Mode: Report metrics are automatically scoped to your assigned appointments.
+          <div className={styles.scopeBadge}>
+            <svg className={styles.scopeIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <span>Doctor Scoped Mode: Filtered to your consultations</span>
           </div>
         )}
       </div>
 
       {!canRead && (
-        <div className="card" style={{ marginTop: 'var(--space-6)' }}>
+        <div className="card">
           <p className="text-muted">You do not have permission to view or generate reports.</p>
         </div>
       )}
 
       {canRead && (
         <>
-          {/* Daily Report Card */}
-          <div className="card" style={{ marginTop: 'var(--space-6)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-              <h3 style={{ fontSize: 'var(--text-xl)', fontWeight: 600 }}>
-                📅 Daily Appointments Report
-              </h3>
+          {/* ── Daily Report Card ─────────────────────────────────────────── */}
+          <div className={styles.reportCard}>
+            <div className={styles.cardHeader}>
+              <h2 className={styles.cardTitle}>
+                <svg className={styles.cardTitleIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span>Daily Appointments Report</span>
+              </h2>
             </div>
 
-            <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ flex: 1, minWidth: 220 }}>
+            <div className={styles.controlsRow}>
+              <div className={styles.dateInputGroup}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-1)' }}>
                   <label className="form-label" style={{ marginBottom: 0 }}>Report Date</label>
-                  <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: '11px', padding: '2px 6px' }}
-                      onClick={() => setDatePreset(-1)}
-                    >
+                  <div className={styles.presetGroup}>
+                    <button type="button" className={styles.presetBtn} onClick={() => setDatePreset(-1)}>
                       Yesterday
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: '11px', padding: '2px 6px' }}
-                      onClick={() => setDatePreset(0)}
-                    >
+                    <button type="button" className={styles.presetBtn} onClick={() => setDatePreset(0)}>
                       Today
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: '11px', padding: '2px 6px' }}
-                      onClick={() => setDatePreset(1)}
-                    >
+                    <button type="button" className={styles.presetBtn} onClick={() => setDatePreset(1)}>
                       Tomorrow
                     </button>
                   </div>
@@ -311,71 +332,102 @@ export default function ReportsPage() {
                 />
               </div>
 
-              <button
-                className="btn btn-primary"
-                onClick={handleDaily}
-                type="button"
-                disabled={loadingDaily}
-              >
-                {loadingDaily ? 'Loading Report...' : '🔍 View Report'}
-              </button>
+              <div className={styles.buttonGroup}>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleDaily}
+                  type="button"
+                  disabled={loadingDaily}
+                >
+                  <span className={styles.btnWithIcon}>
+                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <span>{loadingDaily ? 'Loading Report...' : 'View Report'}</span>
+                  </span>
+                </button>
 
-              <button
-                className="btn btn-secondary"
-                onClick={() => handleExportDaily('pdf')}
-                type="button"
-                disabled={exportingDaily === 'pdf'}
-                title="Download high-resolution PDF document"
-              >
-                {exportingDaily === 'pdf' ? 'Generating PDF...' : '📄 Download PDF'}
-              </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleExportDaily('pdf')}
+                  type="button"
+                  disabled={exportingDaily === 'pdf'}
+                  title="Download high-resolution PDF document"
+                >
+                  <span className={styles.btnWithIcon}>
+                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="12" y1="18" x2="12" y2="12" />
+                      <line x1="9" y1="15" x2="12" y2="18" />
+                      <line x1="15" y1="15" x2="12" y2="18" />
+                    </svg>
+                    <span>{exportingDaily === 'pdf' ? 'Generating PDF...' : 'Download PDF'}</span>
+                  </span>
+                </button>
 
-              <button
-                className="btn btn-secondary"
-                onClick={() => handleExportDaily('csv')}
-                type="button"
-                disabled={exportingDaily === 'csv'}
-                title="Download CSV spreadsheet"
-              >
-                {exportingDaily === 'csv' ? 'Generating CSV...' : '📊 Download CSV'}
-              </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleExportDaily('csv')}
+                  type="button"
+                  disabled={exportingDaily === 'csv'}
+                  title="Download CSV spreadsheet"
+                >
+                  <span className={styles.btnWithIcon}>
+                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    <span>{exportingDaily === 'csv' ? 'Generating CSV...' : 'Download CSV'}</span>
+                  </span>
+                </button>
+              </div>
             </div>
 
             {error && (
-              <div style={{ color: 'var(--color-error)', marginTop: 'var(--space-4)' }} role="alert">
+              <div style={{ color: 'var(--color-danger)', marginTop: 'var(--space-4)' }} role="alert">
                 {error}
               </div>
             )}
 
             {dailyData && !loadingDaily && (
-              <div style={{ marginTop: 'var(--space-6)' }}>
+              <div className={styles.resultSection}>
                 {/* Metric Summary Ribbon */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Total Appointments</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-primary-600)' }}>{dailyData.summary?.total ?? 0}</div>
+                <div className={styles.kpiGrid}>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Total Appointments</span>
+                    <span className={styles.kpiValue}>{dailyData.summary?.total ?? 0}</span>
                   </div>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Scheduled</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#0284c7' }}>{dailyData.summary?.scheduled ?? 0}</div>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Scheduled</span>
+                    <span className={styles.kpiValue} style={{ color: 'var(--color-warning)' }}>
+                      {dailyData.summary?.scheduled ?? 0}
+                    </span>
                   </div>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Completed</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#16a34a' }}>{dailyData.summary?.completed ?? 0}</div>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Completed</span>
+                    <span className={styles.kpiValue} style={{ color: 'var(--color-success)' }}>
+                      {dailyData.summary?.completed ?? 0}
+                    </span>
                   </div>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Cancelled</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#dc2626' }}>{dailyData.summary?.cancelled ?? 0}</div>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Cancelled</span>
+                    <span className={styles.kpiValue} style={{ color: 'var(--color-danger)' }}>
+                      {dailyData.summary?.cancelled ?? 0}
+                    </span>
                   </div>
                 </div>
 
-                <div style={{ marginBottom: 'var(--space-3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h4 style={{ fontWeight: 600, fontSize: 'var(--text-md)' }}>
+                <div style={{ margin: 'var(--space-6) 0 var(--space-3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 className={styles.resultTitle}>
                     Appointments on {dailyDate} ({sortedDailyAppointments.length} record{sortedDailyAppointments.length === 1 ? '' : 's'})
-                  </h4>
+                  </h3>
                   {sortedDailyAppointments.length > 0 && (
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                      Click any column header to sort
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-dim)' }}>
+                      Click column headers to sort
                     </span>
                   )}
                 </div>
@@ -396,16 +448,21 @@ export default function ReportsPage() {
             )}
           </div>
 
-          {/* Monthly Report Card */}
-          <div className="card" style={{ marginTop: 'var(--space-6)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-              <h3 style={{ fontSize: 'var(--text-xl)', fontWeight: 600 }}>
-                📈 Monthly Activity Summary
-              </h3>
+          {/* ── Monthly Report Card ───────────────────────────────────────── */}
+          <div className={styles.reportCard}>
+            <div className={styles.cardHeader}>
+              <h2 className={styles.cardTitle}>
+                <svg className={styles.cardTitleIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 20V10" />
+                  <path d="M12 20V4" />
+                  <path d="M6 20v-6" />
+                </svg>
+                <span>Monthly Activity Summary</span>
+              </h2>
             </div>
 
-            <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ flex: 1, minWidth: 140 }}>
+            <div className={styles.controlsRow}>
+              <div className="form-group" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
                 <label className="form-label">Year</label>
                 <input
                   type="number"
@@ -418,7 +475,7 @@ export default function ReportsPage() {
                 />
               </div>
 
-              <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
+              <div className="form-group" style={{ flex: 1, minWidth: 160, marginBottom: 0 }}>
                 <label className="form-label">Month</label>
                 <select
                   className="form-input"
@@ -431,73 +488,111 @@ export default function ReportsPage() {
                 </select>
               </div>
 
-              <button
-                className="btn btn-primary"
-                onClick={handleMonthly}
-                type="button"
-                disabled={loadingMonthly}
-              >
-                {loadingMonthly ? 'Loading Report...' : '🔍 View Report'}
-              </button>
+              <div className={styles.buttonGroup}>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleMonthly}
+                  type="button"
+                  disabled={loadingMonthly}
+                >
+                  <span className={styles.btnWithIcon}>
+                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <span>{loadingMonthly ? 'Loading Report...' : 'View Report'}</span>
+                  </span>
+                </button>
 
-              <button
-                className="btn btn-secondary"
-                onClick={() => handleExportMonthly('pdf')}
-                type="button"
-                disabled={exportingMonthly === 'pdf'}
-                title="Download high-resolution PDF document"
-              >
-                {exportingMonthly === 'pdf' ? 'Generating PDF...' : '📄 Download PDF'}
-              </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleExportMonthly('pdf')}
+                  type="button"
+                  disabled={exportingMonthly === 'pdf'}
+                  title="Download high-resolution PDF document"
+                >
+                  <span className={styles.btnWithIcon}>
+                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="12" y1="18" x2="12" y2="12" />
+                      <line x1="9" y1="15" x2="12" y2="18" />
+                      <line x1="15" y1="15" x2="12" y2="18" />
+                    </svg>
+                    <span>{exportingMonthly === 'pdf' ? 'Generating PDF...' : 'Download PDF'}</span>
+                  </span>
+                </button>
 
-              <button
-                className="btn btn-secondary"
-                onClick={() => handleExportMonthly('csv')}
-                type="button"
-                disabled={exportingMonthly === 'csv'}
-                title="Download CSV spreadsheet"
-              >
-                {exportingMonthly === 'csv' ? 'Generating CSV...' : '📊 Download CSV'}
-              </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleExportMonthly('csv')}
+                  type="button"
+                  disabled={exportingMonthly === 'csv'}
+                  title="Download CSV spreadsheet"
+                >
+                  <span className={styles.btnWithIcon}>
+                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    <span>{exportingMonthly === 'csv' ? 'Generating CSV...' : 'Download CSV'}</span>
+                  </span>
+                </button>
+              </div>
             </div>
 
             {monthlyData && !loadingMonthly && (
-              <div style={{ marginTop: 'var(--space-6)' }}>
-                {/* Metric Summary Ribbon */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Total Visits</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-primary-600)' }}>{monthlyData.summary?.total ?? 0}</div>
+              <div className={styles.resultSection}>
+                {/* Metric Summary Ribbon for Monthly Activity */}
+                <div className={styles.kpiGrid}>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Total Visits</span>
+                    <span className={styles.kpiValue}>{monthlyData.summary?.total ?? 0}</span>
                   </div>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Scheduled</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#0284c7' }}>{monthlyData.summary?.scheduled ?? 0}</div>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Scheduled</span>
+                    <span className={styles.kpiValue} style={{ color: 'var(--color-warning)' }}>
+                      {monthlyData.summary?.scheduled ?? 0}
+                    </span>
                   </div>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Completed</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#16a34a' }}>{monthlyData.summary?.completed ?? 0}</div>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Completed</span>
+                    <span className={styles.kpiValue} style={{ color: 'var(--color-success)' }}>
+                      {monthlyData.summary?.completed ?? 0}
+                    </span>
                   </div>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Cancelled</div>
-                    <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: '#dc2626' }}>{monthlyData.summary?.cancelled ?? 0}</div>
+                  <div className={styles.kpiCard}>
+                    <span className={styles.kpiLabel}>Cancelled</span>
+                    <span className={styles.kpiValue} style={{ color: 'var(--color-danger)' }}>
+                      {monthlyData.summary?.cancelled ?? 0}
+                    </span>
                   </div>
                 </div>
 
-                <h4 style={{ fontWeight: 600, marginBottom: 'var(--space-2)' }}>Visits by Doctor</h4>
-                <DataTable
-                  columns={monthlyDoctorColumns}
-                  data={monthlyData.perDoctor || []}
-                  pagination={{ page: 1, limit: 50, total: monthlyData.perDoctor?.length || 0, totalPages: 1 }}
-                  onPageChange={() => {}}
-                />
-
-                <h4 style={{ fontWeight: 600, marginTop: 'var(--space-6)', marginBottom: 'var(--space-2)' }}>Visits by Patient</h4>
-                <DataTable
-                  columns={monthlyPatientColumns}
-                  data={monthlyData.perPatient || []}
-                  pagination={{ page: 1, limit: 50, total: monthlyData.perPatient?.length || 0, totalPages: 1 }}
-                  onPageChange={() => {}}
-                />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-6)', marginTop: 'var(--space-6)' }}>
+                  <div>
+                    <h3 className={styles.resultTitle}>
+                      Consultations by Physician ({((monthlyData.perDoctor || monthlyData.byDoctor || []).length)} records)
+                    </h3>
+                    <DataTable
+                      columns={monthlyDoctorColumns}
+                      data={monthlyData.perDoctor || monthlyData.byDoctor || []}
+                      pagination={{ page: 1, limit: 100, total: (monthlyData.perDoctor || monthlyData.byDoctor || []).length, totalPages: 1 }}
+                    />
+                  </div>
+                  <div>
+                    <h3 className={styles.resultTitle}>
+                      Visits by Patient ({((monthlyData.perPatient || monthlyData.byPatient || []).length)} records)
+                    </h3>
+                    <DataTable
+                      columns={monthlyPatientColumns}
+                      data={monthlyData.perPatient || monthlyData.byPatient || []}
+                      pagination={{ page: 1, limit: 100, total: (monthlyData.perPatient || monthlyData.byPatient || []).length, totalPages: 1 }}
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>

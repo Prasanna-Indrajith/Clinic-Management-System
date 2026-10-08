@@ -14,12 +14,24 @@ const createAppointment = async (req, res) => {
   return new Promise((resolve) => {
     bookingMutex = bookingMutex
       .then(async () => {
-        const { patient_id, doctor_id, date_time, remarks } = req.body;
+        let { patient_id, doctor_id, date_time, remarks } = req.body;
 
         try {
           const appointment = await sequelize.transaction(async (t) => {
+            // If logged in as patient, automatically bind to their own patient profile
+            let effectivePatientId = patient_id;
+            if (req.user && req.user.role === 'patient') {
+              const patientProfile = await Patient.findOne({ where: { user_id: req.user.id }, transaction: t });
+              if (!patientProfile) {
+                const error = new Error('Patient profile not found for this account');
+                error.status = 404;
+                throw error;
+              }
+              effectivePatientId = patientProfile.patient_id;
+            }
+
             // Verify patient exists
-            const patient = await Patient.findByPk(patient_id, { transaction: t });
+            const patient = await Patient.findByPk(effectivePatientId, { transaction: t });
             if (!patient) {
               const error = new Error('Patient not found');
               error.status = 404;
@@ -54,7 +66,7 @@ const createAppointment = async (req, res) => {
 
             return Appointment.create(
               {
-                patient_id,
+                patient_id: effectivePatientId,
                 doctor_id,
                 date_time: appointmentDate,
                 status: 'scheduled',
@@ -71,7 +83,7 @@ const createAppointment = async (req, res) => {
             entity: 'Appointment',
             entityId: appointment.appointment_id,
             ipAddress,
-            details: { patient_id, doctor_id, date_time },
+            details: { patient_id: appointment.patient_id, doctor_id, date_time },
           });
 
           logger.info(`Appointment booked: #${appointment.appointment_id} for Doctor #${doctor_id}`);
@@ -235,6 +247,21 @@ const updateAppointment = async (req, res) => {
         throw error;
       }
 
+      // IDOR and privilege check for patient role
+      if (req.user && req.user.role === 'patient') {
+        const patientProfile = await Patient.findOne({ where: { user_id: req.user.id }, transaction: t });
+        if (!patientProfile || appointment.patient_id !== patientProfile.patient_id) {
+          const error = new Error("Forbidden: You cannot modify another patient's appointment.");
+          error.status = 403;
+          throw error;
+        }
+        if (status && status !== 'cancelled' && status !== 'scheduled') {
+          const error = new Error('Patients can only schedule or cancel their appointments.');
+          error.status = 403;
+          throw error;
+        }
+      }
+
       if (date_time && new Date(date_time).getTime() !== new Date(appointment.date_time).getTime()) {
         const newDateTime = new Date(date_time);
         const conflict = await Appointment.findOne({
@@ -273,7 +300,7 @@ const updateAppointment = async (req, res) => {
       details: req.body,
     });
 
-    logger.info(`Appointment updated: #${updated.appointment_id}`);
+    logger.info(`Appointment updated: #${updated.appointment_id} (status: ${updated.status})`);
 
     return res.status(200).json({
       message: 'Appointment updated successfully',

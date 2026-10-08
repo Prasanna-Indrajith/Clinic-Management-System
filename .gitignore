@@ -1,5 +1,5 @@
+# Local / Untracked
 untrack/
-*.md
 .agents/
 skills-lock.json
 
@@ -15,23 +15,57 @@ node_modules/
 # Build outputs
 dist/
 build/
+dist-ssr/
+*.local
 **/dist/
 **/build/
 
 # Logs
 logs/
+backend/logs
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Editor / OS
+# Docker & Containerization (untracked)
+docker-compose*.yml
+**/Dockerfile*
+**/nginx.conf
+render.yaml
+
+# CI/CD (untracked)
+.github/
+
+# Agent & Tool Metadata / Caches
+.codex/
+.impeccable/
+.claude/
+.cursor/
+.gemini/
+
+# Editor / IDE / OS
 .DS_Store
-.vscode/settings.json
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 *.swp
 *.swo
+*~
 
 # Test coverage
 coverage/
 **/coverage/
+
+# Temporary / Cache
+tmp/
+temp/
+.cache/
 
 # Husky
 .husky/_

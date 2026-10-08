@@ -54,10 +54,9 @@ async function fetchDailyReportData(date, user) {
  */
 async function fetchMonthlyReportData(year, month, user) {
   const monthNum = parseInt(month, 10);
-  const startOfMonth = new Date(`${year}-${String(monthNum).padStart(2, '0')}-01T00:00:00.000Z`);
-  const endOfMonth = new Date(
-    new Date(startOfMonth.getFullYear(), monthNum, 0, 23, 59, 59, 999).toISOString()
-  );
+  const yearNum = parseInt(year, 10);
+  const startOfMonth = new Date(Date.UTC(yearNum, monthNum - 1, 1, 0, 0, 0, 0));
+  const endOfMonth = new Date(Date.UTC(yearNum, monthNum, 0, 23, 59, 59, 999));
 
   const whereClause = {
     date_time: { [Op.between]: [startOfMonth, endOfMonth] },
@@ -68,11 +67,13 @@ async function fetchMonthlyReportData(year, month, user) {
     const doctorProfile = await Doctor.findOne({ where: { user_id: user.id } });
     if (!doctorProfile) {
       return {
-        year: parseInt(year, 10),
+        year: yearNum,
         month: monthNum,
         summary: { total: 0, scheduled: 0, completed: 0, cancelled: 0 },
         perDoctor: [],
+        byDoctor: [],
         perPatient: [],
+        byPatient: [],
       };
     }
     whereClause.doctor_id = doctorProfile.doctor_id;
@@ -118,12 +119,17 @@ async function fetchMonthlyReportData(year, month, user) {
     cancelled: appointments.filter((a) => a.status === 'cancelled').length,
   };
 
+  const doctorList = Object.values(perDoctorMap);
+  const patientList = Object.values(perPatientMap);
+
   return {
-    year: parseInt(year, 10),
+    year: yearNum,
     month: monthNum,
     summary,
-    perDoctor: Object.values(perDoctorMap),
-    perPatient: Object.values(perPatientMap),
+    perDoctor: doctorList,
+    byDoctor: doctorList,
+    perPatient: patientList,
+    byPatient: patientList,
   };
 }
 
@@ -148,6 +154,8 @@ const dailyReport = async (req, res) => {
       ipAddress,
       details: { date, requestedBy: req.user.role },
     });
+
+    logger.info(`Daily report generated for ${date} by ${req.user.email} (${req.user.role})`);
 
     return res.status(200).json({ data });
   } catch (err) {
@@ -183,6 +191,8 @@ const monthlyReport = async (req, res) => {
       details: { year, month: monthNum, requestedBy: req.user.role },
     });
 
+    logger.info(`Monthly report generated for ${year}-${monthNum} by ${req.user.email} (${req.user.role})`);
+
     return res.status(200).json({ data });
   } catch (err) {
     logger.error('Error generating monthly report', { message: err.message });
@@ -211,6 +221,8 @@ const exportDailyReport = async (req, res) => {
       ipAddress,
       details: { date, format, requestedBy: req.user.role },
     });
+
+    logger.info(`Daily report exported (${format}) for ${date} by ${req.user.email}`);
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -289,6 +301,8 @@ const exportMonthlyReport = async (req, res) => {
     });
 
     const monthFormatted = String(monthNum).padStart(2, '0');
+
+    logger.info(`Monthly report exported (${format}) for ${year}-${monthNum} by ${req.user.email}`);
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');

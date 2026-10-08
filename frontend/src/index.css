@@ -86,12 +86,53 @@
   --transition-normal: 250ms ease;
   --transition-slow: 400ms ease;
 
+  --color-btn-primary-text: #0d1b2a;
+
   /* Z-index layers */
   --z-base: 0;
   --z-raised: 10;
   --z-overlay: 100;
   --z-modal: 200;
   --z-toast: 300;
+}
+
+/* ── Light Mode Token Overrides ───────────────────────────────────────────── */
+[data-theme="light"] {
+  /* Palette — clinical pearl background with pristine white surfaces */
+  --color-base: #f4f7fa;
+  --color-surface: #ffffff;
+  --color-surface-2: #edf2f7;
+  --color-border: #cbd5e1;
+
+  --color-accent: #0d9488;
+  --color-accent-2: #0f766e;
+  --color-accent-glow: rgba(13, 148, 136, 0.14);
+  --color-btn-primary-text: #ffffff;
+
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-danger: #e11d48;
+  --color-danger-bg: rgba(225, 29, 72, 0.08);
+
+  --color-text: #0f172a;
+  --color-text-muted: #334155;
+  --color-text-dim: #64748b;
+
+  /* Shadows tailored for crisp light surfaces */
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.07), 0 2px 4px rgba(15, 23, 42, 0.03);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.10), 0 4px 8px rgba(15, 23, 42, 0.04);
+  --shadow-glow: 0 0 20px rgba(13, 148, 136, 0.16);
+}
+
+[data-theme="light"] .form-input {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .form-input:focus {
+  border-color: var(--color-accent);
+  background: #ffffff;
 }
 
 /* ── Reset ────────────────────────────────────────────────────────────────── */
@@ -204,7 +245,7 @@ a:focus-visible {
 
 .btn-primary {
   background: var(--color-accent);
-  color: var(--color-base);
+  color: var(--color-btn-primary-text, var(--color-base));
   font-weight: var(--font-semi);
 }
 
@@ -438,7 +479,8 @@ a:focus-visible {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;

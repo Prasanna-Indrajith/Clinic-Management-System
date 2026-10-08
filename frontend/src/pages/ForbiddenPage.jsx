@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import SignOutModal from '../components/auth/SignOutModal';
 
 export default function ForbiddenPage({ allowedRoles }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
 
   return (
     <div
@@ -17,17 +20,36 @@ export default function ForbiddenPage({ allowedRoles }) {
         gap: 'var(--space-3)',
       }}
     >
-      <span
+      <div
         style={{
-          fontSize: 'var(--text-4xl)',
-          lineHeight: 1,
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          background: 'rgba(252, 92, 101, 0.12)',
+          border: '1px solid rgba(252, 92, 101, 0.25)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--color-danger)',
           marginBottom: 'var(--space-2)',
         }}
-        role="img"
-        aria-label="Access Restricted"
+        aria-hidden="true"
       >
-        🛡️
-      </span>
+        <svg
+          viewBox="0 0 24 24"
+          width="28"
+          height="28"
+          stroke="currentColor"
+          strokeWidth="2"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      </div>
       <span className="badge badge-danger" style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         403 — Access Denied
       </span>
@@ -43,10 +65,19 @@ export default function ForbiddenPage({ allowedRoles }) {
         <Link to="/dashboard" className="btn btn-primary">
           Back to Dashboard
         </Link>
-        <button type="button" className="btn btn-secondary" onClick={logout}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => setShowSignOutModal(true)}
+        >
           Sign in as Different User
         </button>
       </div>
+
+      <SignOutModal
+        isOpen={showSignOutModal}
+        onClose={() => setShowSignOutModal(false)}
+      />
     </div>
   );
 }

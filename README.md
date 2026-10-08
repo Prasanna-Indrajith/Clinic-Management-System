@@ -1,23 +1,23 @@
-# Clinic Appointment & Patient Tracker
+# Clinic Appointment & Patient Tracker (ClinicMate)
 
-A full-stack, secure, production-ready clinical operations platform for managing patients, doctor assignments, appointment bookings with transactional race-condition prevention, and clinical performance reporting with automated PDF/CSV export.
+A secure, full-stack clinical operations and patient management platform built with modern Node.js and React. Features role-based access control (RBAC), conflict-free appointment scheduling with transactional race-condition prevention, patient self-booking with doctor availability slot calculations, interactive clinical dashboards, automated PDF/CSV medical reporting, and persistent Light/Dark mode themes.
 
 ---
 
 ## 1. System Architecture & Tech Stack
 
 - **Backend**: Node.js (v20+), Express 4, Sequelize ORM (PostgreSQL in production / SQLite in memory for unit testing)
-- **Frontend**: React 19, Vite, React Router v6, Axios, React Hot Toast, Lucide Icons
-- **Database**: PostgreSQL 16 (with relational constraints, index-backed foreign keys, and connection pooling)
+- **Frontend**: React 19, Vite, React Router v6, Axios, React Hot Toast, Vanilla CSS Design System
+- **Database**: PostgreSQL 16 (relational schema, foreign keys, index-backed lookups, transactional locks)
 - **Security & Hardening**:
-  - JWT Authentication (Bearer tokens stored in memory & `sessionStorage`)
+  - JWT Authentication (Bearer tokens stored securely in memory & `sessionStorage`)
   - Role-Based Access Control (RBAC) with 4 roles: `admin`, `doctor`, `receptionist`, `patient`
-  - Helmet HTTP Security Headers (CSP, XSS protection, MIME sniff protection)
+  - Helmet HTTP Security Headers (strict CSP, MIME sniff protection, frameguard)
   - Rate limiting on authentication endpoints (5 failed attempts per 15 minutes)
   - Password hashing with `bcrypt` (10 salt rounds)
   - Parameterized ORM queries preventing SQL injection
   - In-memory Promise-queue Mutex (`bookingMutex`) preventing concurrent double-booking
-- **Containerization & Deployment**: Podman / Docker support, Multi-stage builds, Nginx reverse-proxy and SPA server, Podman Compose / Docker Compose orchestration
+  - Sign-out confirmation modal preventing accidental session loss
 
 ---
 
@@ -25,26 +25,23 @@ A full-stack, secure, production-ready clinical operations platform for managing
 
 | Service | Port | Description |
 |---|---|---|
-| **Frontend Web App** | `5173` (dev) / `80` (Container) | Patient portal, doctor dashboard, admin management |
-| **Backend REST API** | `5000` | Core clinical APIs and auth endpoints |
+| **Frontend Web App** | `5173` | Patient self-booking portal, clinical staff dashboards |
+| **Backend REST API** | `5000` | Core clinical APIs, auth, reporting, and audit logs |
 | **Swagger API Docs** | `5000` (`/api/docs`) | Interactive OpenAPI 3.0 specification |
 | **PostgreSQL Database** | `5432` | Relational persistence with foreign-key constraints |
 
 ---
 
-## 3. Getting Started (Local Development)
+## 3. Quick Start (Local Development)
 
 ### Prerequisites
 - Node.js (v20 or higher)
 - npm (v9 or higher)
-- PostgreSQL 16 (optional for dev; SQLite runs automatically for tests)
+- PostgreSQL 16 (or local database container)
 
-### 1. Clone & Configure Environment
+### 1. Configure Environment
 ```bash
-git clone <repo-url>
-cd clinic_appointment_and_patient_tracker
-
-# Copy environment template
+# Backend environment setup
 cp backend/.env.example backend/.env
 ```
 
@@ -57,12 +54,22 @@ npm install
 npm --prefix frontend install
 ```
 
-### 3. Run Development Servers
+### 3. Seed Database
 ```bash
-# Terminal 1: Backend API (runs on port 5000)
+# Seeds realistic Sri Lankan clinical staff, patient profiles, and multi-month appointments
+npm run db:seed
+```
+
+### 4. Start Development Servers
+```bash
+# Run both backend (:5000) and frontend (:5173) concurrently:
+npm run dev
+
+# Or run them in separate terminals:
+# Terminal 1: Backend
 npm --prefix backend run dev
 
-# Terminal 2: Frontend Client (runs on port 5173)
+# Terminal 2: Frontend
 npm --prefix frontend run dev
 ```
 
@@ -70,86 +77,89 @@ Visit `http://localhost:5173` to access the application.
 
 ---
 
-## 4. Dev Testing & Deployment Modes
+## 4. Demo Accounts (1-Click Login)
 
-### Mode A: Hybrid Local Dev Testing (Fastest & Easiest for Development)
-Run PostgreSQL in a Podman container while running the backend (Nodemon) and frontend (Vite HMR) directly on your host machine with immediate code reload:
+The login screen provides 1-click credential presets for testing each clinical role:
 
-```bash
-# 1. Start PostgreSQL 16 container in the background
-npm run db:up
+| Role | Email | Password | Name / Specialization |
+|---|---|---|---|
+| **Patient** | `patient@clinic.local` | `PatientPass123!` | Ruwan Bandara |
+| **Receptionist** | `receptionist@clinic.local` | `ReceptionPass123!` | Kumari Dissanayake |
+| **Doctor** | `dr.smith@clinic.local` | `DoctorPass123!` | Dr. Sanduni Perera (Cardiology) |
+| **Admin** | `admin@clinic.local` | `AdminPass123!` | Pasan Jayasuriya (Clinic Admin) |
 
-# 2. Seed realistic demo data (admin, doctors, patients, appointments)
-npm run db:seed
-
-# 3. Start backend (:5000) and frontend (:5173) with live hot-reloading
-npm run dev
-
-# 4. Stop PostgreSQL container when finished
-npm run db:down
-```
-
-### Mode B: Full-Container Dev Testing with Live Volume Mounts
-Run all 3 services in Podman containers with live host volume mounts (changes to `backend/` or `frontend/` instantly reload inside the containers):
-
-```bash
-# Start full dev stack with Nodemon & Vite HMR
-npm run dev:podman
-# (or: podman compose -f docker-compose.dev.yml up --build)
-```
-
-### Mode C: Production Deployment Simulation
-Spins up production containers (multi-stage production builds, Nginx reverse proxy serving static bundle, production backend):
-
-```bash
-podman compose up --build
-# (or: podman-compose up --build)
-```
-
-The PostgreSQL database initializes automatically, seeds schema tables via Sequelize sync, and establishes networking between containers.
-- Access the web interface at `http://localhost`
-- Access the API documentation at `http://localhost/api/docs` or `http://localhost:5000/api/docs`
+Additional doctor profiles available in seed data:
+- `dr.house@clinic.local` (General Medicine)
+- `dr.desilva@clinic.local` (Pediatrics)
+- `dr.wickramasinghe@clinic.local` (Dermatology)
+- `dr.fernando@clinic.local` (Orthopedics)
 
 ---
 
 ## 5. Automated Testing & Code Quality
 
-The codebase enforces a comprehensive automated test suite across unit, integration, security, and UI levels.
+The repository includes **111 automated tests** across unit, integration, RBAC security, UI, and load-testing levels:
 
 ```bash
-# Run all backend test suites (auth, patients, appointments, reports, e2e, security)
-npm test
+# Run all tests (backend Jest + frontend Vitest)
+npm run test:all
 
-# Run frontend Vitest suite (route guards, DataTable, Modal components)
-npm --prefix frontend test -- --run
+# Run backend test suite (86 tests)
+npm run test:backend
 
-# Run ESLint on backend and frontend
-npm --prefix backend run lint
-npm --prefix frontend run lint
+# Run frontend Vitest suite (25 tests)
+npm run test:frontend
+
+# Code quality & linting
+npm run lint
 ```
 
-### Test Suite Breakdown (79 Automated Tests):
-- `backend/__tests__/auth.test.js`: AUTH-01 to AUTH-09 (Registration, login, bcrypt, token verification, RBAC)
-- `backend/__tests__/patients.test.js`: PAT-01 to PAT-07, DOC-01 to DOC-03 (CRUD operations, doctor scoping, literal search)
-- `backend/__tests__/appointments.test.js`: APT-01 to APT-06 (Slot booking, double-booking rejection, concurrent race condition handling)
-- `backend/__tests__/reports.test.js`: REP-01 to REP-05 (Daily/monthly reports, CSV/PDF streaming, role scoping)
-- `backend/__tests__/e2e.test.js`: End-to-end user journeys (Admin setup -> Doctor schedule -> Patient booking -> Report generation)
-- `backend/__tests__/security.test.js`: SEC-01 to SEC-08 (SQLi injection immunity, XSS handling, IDOR boundaries, CORS headers, zero credential leak)
-- `frontend/src/__tests__/routeGuards.test.jsx`: FE-01 to FE-04 (Client-side auth redirects, unauthorized route protection)
-- `frontend/src/__tests__/uiComponents.test.jsx`: DataTable sorting, pagination, and Modal lifecycle events
+### Test Suite Summary:
+- `backend/__tests__/auth.test.js`: Registration, login, password comparison, token issuance, RBAC enforcement
+- `backend/__tests__/patients.test.js`: Patient CRUD operations, doctor assignment scoping, search sanitization
+- `backend/__tests__/appointments.test.js`: Slot booking, double-booking rejection, transactional concurrency locks
+- `backend/__tests__/patientPortal.test.js`: Doctor availability slot calculation and patient self-booking
+- `backend/__tests__/reports.test.js`: Daily/monthly report calculations, CSV & PDF export streaming
+- `backend/__tests__/security.test.js`: SQLi injection immunity, XSS handling, IDOR protection, zero credential leakage
+- `backend/__tests__/e2e.test.js`: Full patient lifecycle and appointment workflow
+- `frontend/src/__tests__/routeGuards.test.jsx`: Client-side route protection, unauthenticated redirects, role boundaries
+- `frontend/src/__tests__/themeToggle.test.jsx`: Light/Dark mode state management and localStorage persistence
+- `frontend/src/__tests__/signOutModal.test.jsx`: Sign-out confirmation modal interaction and session clearance
+- `frontend/src/__tests__/patientBooking.test.jsx`: 1-click patient preset filling and self-booking verification
+- `frontend/src/__tests__/uiComponents.test.jsx`: DataTable sorting, pagination, and Modal component behavior
 
 ---
 
-## 6. Seed Credentials for Verification
+## 6. Project Structure
 
-- **Default Test Doctor**: `jane.smith@clinic.local` / `SecurePass123!`
-- **Initial Admin Creation**: Available via the self-registration page at `/register` by selecting the `admin` role.
-
----
-
-## 7. Project Documentation
-
-- [01_DEVELOPMENT_PLAN.md](01_DEVELOPMENT_PLAN.md): Complete phase-by-phase implementation plan and definition of done.
-- [02_TEST_PLAN.md](02_TEST_PLAN.md): Formal verification matrices and test IDs (`AUTH`, `PAT`, `DOC`, `APT`, `REP`, `SEC`, `FE`).
-- [PROGRESS.md](PROGRESS.md): Live phase completion tracking and milestone statuses.
-- [STATUS.md](STATUS.md): Quick reference guide for endpoints, credentials, and local run configurations.
+```text
+clinic_appointment_and_patient_tracker/
+├── backend/
+│   ├── src/
+│   │   ├── config/          # Database, logger, rate-limiter configuration
+│   │   ├── controllers/     # Auth, appointment, patient, doctor, report controllers
+│   │   ├── middleware/      # JWT auth, role validation, error handlers
+│   │   ├── models/          # Sequelize models (User, Patient, Doctor, Appointment, AuditLog)
+│   │   ├── routes/          # Express route definitions & Swagger doc annotations
+│   │   ├── utils/           # Audit logger, token generator, PDF streamer
+│   │   ├── validators/      # Express-validator input validation schemas
+│   │   ├── app.js           # Express app setup and middleware chain
+│   │   ├── seed.js          # Realistic Sri Lankan clinical dataset seeder
+│   │   └── server.js        # Server bootstrap and graceful shutdown
+│   └── __tests__/           # Comprehensive backend Jest test suites
+├── frontend/
+│   ├── src/
+│   │   ├── api/             # Axios client, auth store, API helpers
+│   │   ├── components/      # UI components (DataTable, Modal, ThemeToggle, SignOutModal)
+│   │   ├── context/         # AuthContext, ThemeContext
+│   │   ├── pages/           # Dashboard, Appointments, Patients, Doctors, Reports, Admin, Auth
+│   │   ├── App.jsx          # Protected route setup
+│   │   ├── index.css        # Clinical design tokens (Light & Dark mode themes)
+│   │   └── main.jsx         # App root & context providers
+│   └── index.html           # HTML5 entry with favicon and meta tags
+├── logs/                    # Live application and error log files
+├── untrack/                 # Local docs, setup guides, planning archives, and backups
+├── commitlint.config.js     # Commit message linting rules
+├── package.json             # Monorepo root scripts & dev dependencies
+└── README.md
+```

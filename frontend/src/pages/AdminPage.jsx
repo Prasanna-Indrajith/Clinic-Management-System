@@ -4,7 +4,7 @@ import { usersApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
 import toast from 'react-hot-toast';
-import styles from './DashboardPage.module.css';
+import styles from './AdminPage.module.css';
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
@@ -74,30 +74,51 @@ export default function AdminPage() {
     }
   };
 
+  const getRoleBadge = (role) => {
+    switch (role) {
+      case 'admin':
+        return <span className={`${styles.roleBadge} ${styles.roleAdmin}`}>Admin</span>;
+      case 'doctor':
+        return <span className={`${styles.roleBadge} ${styles.roleDoctor}`}>Doctor</span>;
+      case 'receptionist':
+        return <span className={`${styles.roleBadge} ${styles.roleReceptionist}`}>Receptionist</span>;
+      case 'patient':
+        return <span className={`${styles.roleBadge} ${styles.rolePatient}`}>Patient</span>;
+      default:
+        return <span className="badge badge-info">{role}</span>;
+    }
+  };
+
   const columns = [
-    { key: 'name', label: 'Name', sortable: true },
-    { key: 'email', label: 'Email', sortable: true },
+    {
+      key: 'name',
+      label: 'Staff Member',
+      sortable: true,
+      render: (val) => <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>{val}</span>,
+    },
+    {
+      key: 'email',
+      label: 'System Email',
+      sortable: true,
+      render: (val) => <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{val}</span>,
+    },
     {
       key: 'role',
-      label: 'Role',
+      label: 'Assigned Role',
       sortable: true,
-      render: (val) => (
-        <span className={`badge badge-${val === 'admin' ? 'info' : val === 'doctor' ? 'warning' : 'success'}`}>
-          {val}
-        </span>
-      ),
+      render: (val) => getRoleBadge(val),
     },
     {
       key: 'user_id',
-      label: 'Actions',
+      label: 'Security & Access Actions',
       sortable: false,
       render: (_, row) => (
-        <div className="flex gap-2">
+        <div className={styles.actionRow}>
           <select
-            className="form-input"
-            style={{ minWidth: 120, padding: 'var(--space-1) var(--space-3)', fontSize: 'var(--text-xs)' }}
+            className={styles.roleSelect}
             value=""
             onChange={(e) => e.target.value && handleRoleChange(row, e.target.value)}
+            aria-label="Change user role"
           >
             <option value="">Change role…</option>
             {ROLE_OPTIONS.filter((opt) => opt.value !== row.role).map((opt) => (
@@ -106,11 +127,16 @@ export default function AdminPage() {
           </select>
           {row.user_id !== user?.id && (
             <button
-              className="btn btn-danger btn-sm"
+              className={styles.deleteBtn}
               onClick={() => handleDelete(row)}
               type="button"
+              title="Revoke and delete account"
             >
-              Delete
+              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span>Delete</span>
             </button>
           )}
         </div>
@@ -119,28 +145,56 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
+    <div className={styles.container}>
+      <header className={styles.pageHeader}>
         <div>
-          <h1 className={styles.title}>Admin Settings & User Management</h1>
-          <p className={styles.subtitle}>Manage staff accounts, clinic roles, and audit security logs.</p>
+          <h1 className={styles.headerTitle}>System Admin & Role Governance</h1>
+          <p className={styles.headerSubtitle}>
+            Manage authenticated clinical accounts, role privileges, and security boundaries.
+          </p>
         </div>
-        <span className="badge badge-info">Admin Clearance</span>
+        <div className={styles.adminBadge}>
+          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          <span>Admin Clearance Active</span>
+        </div>
       </header>
 
-      <div className={styles.statsGrid}>
-        <div className="card stat-card">
-          <div className="stat-value">{loading ? '—' : pagination.total}</div>
-          <div className="stat-label">Total Users</div>
+      <div className={styles.kpiRow}>
+        <div className={styles.kpiCard}>
+          <div className={styles.kpiContent}>
+            <span className={styles.kpiLabel}>Total Accounts</span>
+            <span className={styles.kpiValue}>{loading ? '—' : pagination.total}</span>
+          </div>
+          <div className={styles.kpiIconWrap}>
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
         </div>
-        <div className="card stat-card">
-          <div className="stat-value">RBAC</div>
-          <div className="stat-label">Enforced</div>
+
+        <div className={styles.kpiCard}>
+          <div className={styles.kpiContent}>
+            <span className={styles.kpiLabel}>Access Model</span>
+            <span className={styles.kpiValue} style={{ fontSize: 'var(--text-2xl)' }}>Strict RBAC</span>
+          </div>
+          <div className={styles.kpiIconWrap}>
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 'var(--space-6)' }}>
-        <h3 className={styles.panelTitle}>User Accounts</h3>
+      <div className={styles.tableCard}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}>User Accounts Directory</h2>
+        </div>
         {loading ? (
           <div className="flex justify-center items-center" style={{ padding: 'var(--space-12)' }}>
             <div className="spinner" style={{ width: 32, height: 32 }} />
@@ -161,30 +215,17 @@ export default function AdminPage() {
         onClose={() => setModalOpen(false)}
         size="sm"
       >
-        <form onSubmit={handleSubmitRole} noValidate>
-          <div className="form-group">
-            <label className="form-label" htmlFor="new_role">New Role</label>
-            <select
-              id="new_role"
-              className="form-input"
-              value={newRole}
-              onChange={(e) => setNewRole(e.target.value)}
-              required
-            >
-              {ROLE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} disabled={opt.value === selectedUser?.role}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex justify-between" style={{ marginTop: 'var(--space-6)' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>
+        <form onSubmit={handleSubmitRole}>
+          <p style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)' }}>
+            Are you sure you want to change the security role for <strong>{selectedUser?.name}</strong> to{' '}
+            <strong style={{ color: 'var(--color-accent)' }}>{newRole}</strong>?
+          </p>
+          <div className="flex justify-end gap-3">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setModalOpen(false)}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary">
-              Save Role
+            <button type="submit" className="btn btn-primary btn-sm">
+              Confirm Role Change
             </button>
           </div>
         </form>

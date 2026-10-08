@@ -76,6 +76,7 @@ const login = async (req, res) => {
         ipAddress,
         details: { email, reason: 'User not found' },
       });
+      logger.warn(`Failed login attempt: User not found for email ${email}`);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
@@ -90,6 +91,7 @@ const login = async (req, res) => {
         ipAddress,
         details: { email, reason: 'Invalid password' },
       });
+      logger.warn(`Failed login attempt: Invalid password for email ${email}`);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
