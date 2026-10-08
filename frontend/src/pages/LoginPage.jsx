@@ -5,6 +5,7 @@ import * as Yup from 'yup';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { authApi } from '../api/client';
+import ThemeToggle from '../components/ui/ThemeToggle';
 import styles from './AuthPage.module.css';
 
 const schema = Yup.object({
@@ -67,6 +68,7 @@ export default function LoginPage() {
 
   return (
     <div className={styles.page}>
+      <ThemeToggle floating />
       <div className={styles.card}>
         {/* Brand */}
         <div className={styles.brand}>

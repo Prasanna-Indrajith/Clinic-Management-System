@@ -4,6 +4,7 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import toast from 'react-hot-toast';
 import { authApi } from '../api/client';
+import ThemeToggle from '../components/ui/ThemeToggle';
 import styles from './AuthPage.module.css';
 
 const schema = Yup.object({
@@ -51,6 +52,7 @@ export default function RegisterPage() {
 
   return (
     <div className={styles.page}>
+      <ThemeToggle floating />
       <div className={styles.card}>
         {/* Brand */}
         <div className={styles.brand}>
