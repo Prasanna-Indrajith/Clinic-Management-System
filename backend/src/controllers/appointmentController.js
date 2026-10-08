@@ -300,7 +300,7 @@ const updateAppointment = async (req, res) => {
       details: req.body,
     });
 
-    logger.info(`Appointment updated: #${updated.appointment_id}`);
+    logger.info(`Appointment updated: #${updated.appointment_id} (status: ${updated.status})`);
 
     return res.status(200).json({
       message: 'Appointment updated successfully',

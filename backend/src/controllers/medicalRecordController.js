@@ -132,6 +132,8 @@ const createRecord = async (req, res) => {
                 details: { patient_id: patientId, doctor_id: doctor_id || null },
             });
 
+            logger.info(`Medical record created: #${record.record_id} for Patient #${patientId} by Admin`);
+
             return res.status(201).json({
                 message: 'Medical record created successfully',
                 data: record,

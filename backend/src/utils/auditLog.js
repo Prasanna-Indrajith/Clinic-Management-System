@@ -30,7 +30,11 @@ const log = async (entry) => {
     logger.error('Failed to write audit log to database', { message: err.message, entry });
   }
 
-  logger.info('AUDIT', {
+  const target = entry.entity ? ` [${entry.entity}${entry.entityId ? ` #${entry.entityId}` : ''}]` : '';
+  const actor = entry.userId ? ` by User #${entry.userId}` : '';
+  const summary = `AUDIT: ${entry.action}${target}${actor}`;
+
+  logger.info(summary, {
     timestamp: new Date().toISOString(),
     ...entry,
   });

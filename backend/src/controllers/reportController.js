@@ -155,6 +155,8 @@ const dailyReport = async (req, res) => {
       details: { date, requestedBy: req.user.role },
     });
 
+    logger.info(`Daily report generated for ${date} by ${req.user.email} (${req.user.role})`);
+
     return res.status(200).json({ data });
   } catch (err) {
     logger.error('Error generating daily report', { message: err.message });
@@ -189,6 +191,8 @@ const monthlyReport = async (req, res) => {
       details: { year, month: monthNum, requestedBy: req.user.role },
     });
 
+    logger.info(`Monthly report generated for ${year}-${monthNum} by ${req.user.email} (${req.user.role})`);
+
     return res.status(200).json({ data });
   } catch (err) {
     logger.error('Error generating monthly report', { message: err.message });
@@ -217,6 +221,8 @@ const exportDailyReport = async (req, res) => {
       ipAddress,
       details: { date, format, requestedBy: req.user.role },
     });
+
+    logger.info(`Daily report exported (${format}) for ${date} by ${req.user.email}`);
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -295,6 +301,8 @@ const exportMonthlyReport = async (req, res) => {
     });
 
     const monthFormatted = String(monthNum).padStart(2, '0');
+
+    logger.info(`Monthly report exported (${format}) for ${year}-${monthNum} by ${req.user.email}`);
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
