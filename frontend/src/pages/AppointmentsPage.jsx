@@ -1,27 +1,53 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { appointApi, doctorsApi, patientsApi, notificationsApi } from '../api/client';
-import DataTable from '../components/ui/DataTable';
+import { appointApi, doctorsApi, patientsApi } from '../api/client';
 import Modal from '../components/ui/Modal';
+import AppointmentReportModal from '../components/appointments/AppointmentReportModal';
 import toast from 'react-hot-toast';
 import styles from './AppointmentsPage.module.css';
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All Statuses' },
-  { value: 'scheduled', label: 'Scheduled' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
+const RANGE_OPTIONS = [
+  { value: 'upcoming', label: 'Today & Upcoming' },
+  { value: 'today', label: 'Today Only' },
+  { value: 'all', label: 'All Dates (History)' },
 ];
 
-export default function AppointmentsPage() {
+const getLocalDateString = (dateInput = new Date()) => {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (Number.isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getLocalDateTimeInputValue = (dateInput) => {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (Number.isNaN(d.getTime())) return '';
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${getLocalDateString(d)}T${hours}:${minutes}`;
+};
+
+const getLocalStartOfDayISO = (dateStr) => {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0).toISOString();
+};
+
+export default function AppointmentsPage({ mode = 'default' }) {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ status: '', date: '', doctor_id: '' });
+  const [filters, setFilters] = useState({ status: '', range: 'upcoming', date: '', doctor_id: '', search: '' });
+  const [searchInput, setSearchInput] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
+  const [reportAppointment, setReportAppointment] = useState(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('book');
@@ -29,7 +55,7 @@ export default function AppointmentsPage() {
   const [formErrors, setFormErrors] = useState({});
 
   const [bookingDoctorId, setBookingDoctorId] = useState('');
-  const [bookingDate, setBookingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [bookingDate, setBookingDate] = useState(() => getLocalDateString());
   const [availabilitySlots, setAvailabilitySlots] = useState([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -39,17 +65,57 @@ export default function AppointmentsPage() {
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [loadingPatients, setLoadingPatients] = useState(false);
 
+  const [finishModalOpen, setFinishModalOpen] = useState(false);
+  const [finishAppointment, setFinishAppointment] = useState(null);
+  const [clinicalForm, setClinicalForm] = useState({ diagnosis: '', prescription: '', notes: '' });
+  const [clinicalErrors, setClinicalErrors] = useState({});
+  const [finishingAppointment, setFinishingAppointment] = useState(false);
+
+  const isDoctor = user?.role === 'doctor';
   const isPatient = user?.role === 'patient';
+  const isHistory = isPatient && mode === 'history';
   const canWrite = user?.role === 'admin' || user?.role === 'doctor' || user?.role === 'receptionist';
   const canBook = isPatient || canWrite;
+
+  const prevModeRef = useRef(mode);
+  useEffect(() => {
+    if (prevModeRef.current === mode) return;
+    prevModeRef.current = mode;
+    setFilters({ status: '', range: 'upcoming', date: '', doctor_id: '', search: '' });
+    setSearchInput('');
+    setShowFilters(false);
+    setPage(1);
+  }, [mode]);
 
   const fetchAppointments = useCallback(async () => {
     setLoading(true);
     try {
       const params = { page, limit: 10 };
-      if (filters.status) params.status = filters.status;
-      if (filters.date) params.date = filters.date;
-      if (filters.doctor_id) params.doctor_id = filters.doctor_id;
+      if (isHistory) {
+        params.status = filters.status || 'completed,cancelled';
+        params.sortBy = 'date_time';
+        params.sortDir = 'desc';
+        if (filters.date) {
+          params.date = filters.date;
+          params.tzOffset = new Date().getTimezoneOffset();
+        }
+      } else if (isPatient) {
+        if (filters.status) params.status = filters.status;
+        params.startDate = getLocalStartOfDayISO(getLocalDateString());
+      } else {
+        if (filters.status) params.status = filters.status;
+        if (filters.date) {
+          params.date = filters.date;
+          params.tzOffset = new Date().getTimezoneOffset();
+        } else if (filters.range === 'today') {
+          params.date = getLocalDateString();
+          params.tzOffset = new Date().getTimezoneOffset();
+        } else if (filters.range === 'upcoming') {
+          params.startDate = getLocalStartOfDayISO(getLocalDateString());
+        }
+        if (filters.doctor_id) params.doctor_id = filters.doctor_id;
+      }
+      if (filters.search) params.search = filters.search;
       const { data } = await appointApi.list(params);
       setAppointments(data.data || []);
       setPagination(data.pagination || { page, limit: 10, total: 0, totalPages: 1 });
@@ -58,7 +124,7 @@ export default function AppointmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, filters]);
+  }, [page, filters, isHistory, isPatient]);
 
   const fetchDoctors = useCallback(async () => {
     setLoadingDoctors(true);
@@ -89,6 +155,12 @@ export default function AppointmentsPage() {
   }, [fetchAppointments]);
 
   useEffect(() => {
+    if (user?.role === 'admin' || user?.role === 'receptionist') {
+      fetchDoctors();
+    }
+  }, [user?.role, fetchDoctors]);
+
+  useEffect(() => {
     if (modalOpen && (modalMode === 'book' || modalMode === 'edit')) {
       fetchDoctors();
       fetchPatients();
@@ -96,7 +168,17 @@ export default function AppointmentsPage() {
   }, [modalOpen, modalMode, fetchDoctors, fetchPatients]);
 
   const handleFilterChange = (field, value) => {
-    setFilters((prev) => ({ ...prev, [field]: value }));
+    setFilters((prev) => ({
+      ...prev,
+      [field]: value,
+      ...(field === 'range' ? { date: '' } : {}),
+    }));
+    setPage(1);
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setFilters((prev) => ({ ...prev, search: searchInput.trim() }));
     setPage(1);
   };
 
@@ -110,7 +192,10 @@ export default function AppointmentsPage() {
     const fetchSlots = async () => {
       setLoadingAvailability(true);
       try {
-        const { data } = await doctorsApi.getAvailability(bookingDoctorId, { date: bookingDate });
+        const { data } = await doctorsApi.getAvailability(bookingDoctorId, {
+          date: bookingDate,
+          tzOffset: new Date().getTimezoneOffset(),
+        });
         if (isCurrent) {
           setAvailabilitySlots(data.slots || []);
         }
@@ -145,7 +230,7 @@ export default function AppointmentsPage() {
     setSelectedAppointment(null);
     setFormErrors({});
     setBookingDoctorId('');
-    setBookingDate(new Date().toISOString().split('T')[0]);
+    setBookingDate(getLocalDateString());
     setSelectedSlot(null);
     setAvailabilitySlots([]);
     setModalOpen(true);
@@ -156,9 +241,52 @@ export default function AppointmentsPage() {
     setSelectedAppointment(apt);
     setFormErrors({});
     setBookingDoctorId(apt.doctor_id ? String(apt.doctor_id) : '');
-    setBookingDate(apt.date_time ? new Date(apt.date_time).toISOString().split('T')[0] : '');
+    setBookingDate(apt.date_time ? getLocalDateString(apt.date_time) : '');
     setSelectedSlot(null);
     setModalOpen(true);
+  };
+
+  const handleFinish = (apt) => {
+    setFinishAppointment(apt);
+    setClinicalForm({ diagnosis: '', prescription: '', notes: '' });
+    setClinicalErrors({});
+    setFinishModalOpen(true);
+  };
+
+  const handleConfirmFinish = async (e) => {
+    e.preventDefault();
+    const diagnosis = clinicalForm.diagnosis.trim();
+    if (!diagnosis) {
+      setClinicalErrors({ diagnosis: 'Diagnosis is required' });
+      toast.error('Diagnosis is required');
+      return;
+    }
+
+    setClinicalErrors({});
+    setFinishingAppointment(true);
+    try {
+      await appointApi.complete(finishAppointment.appointment_id, {
+        diagnosis,
+        prescription: clinicalForm.prescription.trim() || undefined,
+        notes: clinicalForm.notes.trim() || undefined,
+      });
+      toast.success('Appointment completed and clinical entry added');
+      setFinishModalOpen(false);
+      setFinishAppointment(null);
+      fetchAppointments();
+    } catch (err) {
+      if (err.response?.data?.details) {
+        const fieldErrors = {};
+        err.response.data.details.forEach((d) => {
+          fieldErrors[d.field] = d.message;
+        });
+        setClinicalErrors(fieldErrors);
+      } else {
+        toast.error(err.message || 'Failed to complete appointment');
+      }
+    } finally {
+      setFinishingAppointment(false);
+    }
   };
 
   const handleCancel = async (apt) => {
@@ -172,21 +300,17 @@ export default function AppointmentsPage() {
     }
   };
 
-  const handleSendReminder = async (apt) => {
-    try {
-      const { data } = await notificationsApi.sendReminder(apt.appointment_id);
-      toast.success(data.message || 'Reminder notification queued');
-    } catch (err) {
-      toast.error(err.message || 'Failed to send reminder');
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const doctorId = parseInt(bookingDoctorId || formData.get('doctor_id'), 10);
     const remarks = formData.get('remarks')?.trim() || null;
-    const dateTime = selectedSlot ? selectedSlot.dateTime : formData.get('date_time');
+    const rawDateTime = selectedSlot ? selectedSlot.dateTime : formData.get('date_time');
+    const dateTime = selectedSlot
+      ? selectedSlot.dateTime
+      : rawDateTime
+      ? new Date(rawDateTime).toISOString()
+      : '';
 
     const errors = {};
     if (!isPatient && modalMode === 'book') {
@@ -194,7 +318,11 @@ export default function AppointmentsPage() {
       if (!patientId || isNaN(patientId)) errors.patient_id = 'Patient is required';
     }
     if (!doctorId || isNaN(doctorId)) errors.doctor_id = 'Doctor is required';
-    if (!dateTime) errors.date_time = 'Please select an available consultation slot';
+    if (!dateTime) {
+      errors.date_time = 'Please select an available consultation slot';
+    } else if (modalMode === 'book' && new Date(dateTime).getTime() <= Date.now()) {
+      errors.date_time = 'Selected consultation time has already passed. Please choose an upcoming slot.';
+    }
 
     setFormErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -206,6 +334,10 @@ export default function AppointmentsPage() {
     };
     if (!isPatient && modalMode === 'book') {
       payload.patient_id = parseInt(formData.get('patient_id'), 10);
+    }
+    const statusValue = formData.get('status');
+    if (modalMode === 'edit' && canWrite && statusValue) {
+      payload.status = statusValue;
     }
 
     try {
@@ -238,7 +370,7 @@ export default function AppointmentsPage() {
     return new Date(dateStr).toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'short',
-      year: 'numeric',
+      ...(isHistory ? { year: 'numeric' } : {}),
     });
   };
 
@@ -250,159 +382,233 @@ export default function AppointmentsPage() {
     });
   };
 
-  const getStatusBadge = (status) => {
+  const renderStatusBadge = (status) => {
     switch (status) {
-      case 'scheduled':
-        return <span className={`${styles.statusBadge} ${styles.statusBadgeScheduled}`}>Scheduled</span>;
       case 'completed':
-        return <span className={`${styles.statusBadge} ${styles.statusBadgeCompleted}`}>Completed</span>;
+        return (
+          <span className={`${styles.statusBadge} ${styles.statusBadgeCompleted}`}>
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <polyline points="9 12 11 14 15 10" />
+            </svg>
+            <span>Completed</span>
+          </span>
+        );
       case 'cancelled':
-        return <span className={`${styles.statusBadge} ${styles.statusBadgeCancelled}`}>Cancelled</span>;
+        return (
+          <span className={`${styles.statusBadge} ${styles.statusBadgeCancelled}`}>
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            <span>Cancelled</span>
+          </span>
+        );
       default:
-        return <span className="badge badge-info">{status}</span>;
+        return (
+          <span className={`${styles.statusBadge} ${styles.statusBadgeScheduled}`}>
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <polyline points="12 7 12 12 15 14" />
+            </svg>
+            <span>Scheduled</span>
+          </span>
+        );
     }
   };
 
-  const columns = [
-    {
-      key: 'patient',
-      label: 'Patient',
-      sortable: false,
-      render: (_, row) => (
-        <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>
-          {row.patient?.name || '—'}
-        </span>
-      ),
-    },
-    {
-      key: 'doctor',
-      label: 'Doctor',
-      sortable: false,
-      render: (_, row) => (
-        <span style={{ color: 'var(--color-text-muted)' }}>
-          {row.doctor?.name ? `Dr. ${row.doctor.name}` : '—'}
-        </span>
-      ),
-    },
-    { key: 'date_time', label: 'Date', sortable: false, render: (val) => formatDate(val) },
-    {
-      key: 'date_time',
-      label: 'Time',
-      sortable: false,
-      render: (val) => <span className={styles.timePill}>{formatTime(val)}</span>,
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      sortable: true,
-      render: (val) => getStatusBadge(val),
-    },
-    {
-      key: 'appointment_id',
-      label: 'Actions',
-      sortable: false,
-      render: (_, row) => (
-        <div className={styles.actionGroup}>
-          {canWrite && row.status !== 'cancelled' && (
-            <>
-              {row.status === 'scheduled' && (
-                <button
-                  className={`${styles.actionBtn} ${styles.actionBtnSecondary}`}
-                  onClick={() => handleSendReminder(row)}
-                  type="button"
-                  title="Send reminder to patient"
-                >
-                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                  <span>Remind</span>
-                </button>
-              )}
-              <button
-                className={`${styles.actionBtn} ${styles.actionBtnGhost}`}
-                onClick={() => handleEdit(row)}
-                type="button"
-                title="Edit appointment details"
-              >
-                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                <span>Edit</span>
-              </button>
-              <button
-                className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-                onClick={() => handleCancel(row)}
-                type="button"
-                title="Cancel appointment"
-              >
-                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-                <span>Cancel</span>
-              </button>
-            </>
-          )}
-          {isPatient && row.status === 'scheduled' && (
-            <button
-              className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-              onClick={() => handleCancel(row)}
-              type="button"
-            >
-              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-              <span>Cancel</span>
-            </button>
-          )}
-          {isPatient && row.status !== 'scheduled' && (
-            <span className="text-xs text-muted">Read-only</span>
-          )}
-        </div>
-      ),
-    },
-  ];
+  const hasExtraFilters = Boolean(filters.date || filters.doctor_id || filters.range !== 'upcoming');
 
   return (
-    <div>
+    <div className={styles.pageContainer}>
       {/* ── Page Header ──────────────────────────────────────────────────── */}
       <div className={styles.pageHeader}>
-        <div>
-          <h1 className={styles.headerTitle}>
-            {isPatient ? 'My Appointments & History' : 'Appointments'}
-          </h1>
-          <p className={styles.headerSubtitle}>
-            {isPatient
-              ? 'View your upcoming appointments and healthcare visit records'
-              : 'Book, manage, reschedule, and monitor clinical appointments'}
-          </p>
-        </div>
-        {canBook && (
-          <button className={`btn btn-primary ${styles.headerBtn}`} onClick={handleBook} type="button">
-            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+        <h1 className={styles.headerTitle}>
+          {isHistory ? 'Appointment History' : isPatient ? 'My Appointments' : 'Appointments'}
+        </h1>
+        {canBook && !isHistory && (
+          <button
+            className={`btn btn-primary ${styles.headerActionBtn}`}
+            onClick={handleBook}
+            type="button"
+          >
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            <span>Book Appointment</span>
+            <span>{isPatient ? 'Book Appointment' : 'New Appointment'}</span>
           </button>
         )}
       </div>
 
-      {/* ── Filters Card ─────────────────────────────────────────────────── */}
-      <div className={styles.filterCard}>
-        <div className={styles.filterGrid}>
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel} htmlFor="filter-status">Status</label>
-            <select
-              id="filter-status"
-              className="form-input"
-              value={filters.status}
-              onChange={(e) => handleFilterChange('status', e.target.value)}
+      {/* ── Search & Quick Status Toolbar ────────────────────────────────── */}
+      <div className={styles.toolbar}>
+        <form className={styles.searchBar} onSubmit={handleSearchSubmit}>
+          <button
+            type="submit"
+            className={styles.searchIconBtn}
+            aria-label="Search"
+            title="Search"
+          >
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+          <input
+            id="filter-search"
+            aria-label="Search appointments"
+            type="text"
+            className={styles.searchField}
+            placeholder={isPatient ? 'Search doctor' : 'Search patient or doctor'}
+            value={searchInput}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSearchInput(val);
+              if (val === '' && filters.search !== '') {
+                setFilters((prev) => ({ ...prev, search: '' }));
+                setPage(1);
+              }
+            }}
+          />
+          {searchInput && (
+            <button
+              type="button"
+              className={styles.searchClearBtn}
+              aria-label="Clear search"
+              onClick={() => {
+                setSearchInput('');
+                setFilters((prev) => ({ ...prev, search: '' }));
+                setPage(1);
+              }}
             >
-              {STATUS_OPTIONS.map((opt) => (
+              ×
+            </button>
+          )}
+        </form>
+
+        <div className={styles.toolbarRight}>
+          <div className={styles.statusSegment} role="group" aria-label="Filter by status">
+            <button
+              type="button"
+              className={`${styles.segmentBtn} ${filters.status === '' ? styles.segmentBtnActive : ''}`}
+              onClick={() => handleFilterChange('status', '')}
+              aria-label="All Statuses"
+              title="All Statuses"
+            >
+              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="4" y1="7" x2="20" y2="7" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="17" x2="20" y2="17" />
+              </svg>
+            </button>
+            {!isHistory && (
+              <button
+                type="button"
+                className={`${styles.segmentBtn} ${filters.status === 'scheduled' ? styles.segmentBtnActive : ''}`}
+                onClick={() => handleFilterChange('status', 'scheduled')}
+                aria-label="Scheduled"
+                title="Scheduled"
+              >
+                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <polyline points="12 7 12 12 15 14" />
+                </svg>
+                <span className={styles.segmentLabel}>Scheduled</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className={`${styles.segmentBtn} ${filters.status === 'completed' ? styles.segmentBtnActive : ''}`}
+              onClick={() => handleFilterChange('status', 'completed')}
+              aria-label="Completed"
+              title="Completed"
+            >
+              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="9 12 11 14 15 10" />
+              </svg>
+              <span className={styles.segmentLabel}>Completed</span>
+            </button>
+            <button
+              type="button"
+              className={`${styles.segmentBtn} ${filters.status === 'cancelled' ? styles.segmentBtnActive : ''}`}
+              onClick={() => handleFilterChange('status', 'cancelled')}
+              aria-label="Cancelled"
+              title="Cancelled"
+            >
+              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="16" y1="8" x2="8" y2="16" />
+                <line x1="8" y1="8" x2="16" y2="16" />
+              </svg>
+              <span className={styles.segmentLabel}>Cancelled</span>
+            </button>
+          </div>
+
+          {isHistory && (
+            <div className={styles.historyDateWrap}>
+              <input
+                id="history-filter-date"
+                type="date"
+                aria-label="Filter history by date"
+                className={styles.historyDateInput}
+                value={filters.date}
+                onChange={(e) => handleFilterChange('date', e.target.value)}
+              />
+              {filters.date && (
+                <button
+                  type="button"
+                  className={styles.historyDateClear}
+                  aria-label="Clear date filter"
+                  title="Clear date filter"
+                  onClick={() => handleFilterChange('date', '')}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
+
+          {!isPatient && (
+            <button
+              type="button"
+              className={`${styles.filterToggleBtn} ${showFilters ? styles.filterToggleBtnActive : ''}`}
+              onClick={() => setShowFilters((prev) => !prev)}
+              aria-label="Filters"
+              aria-expanded={showFilters}
+              title="More Filters"
+            >
+              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="4" y1="21" x2="4" y2="14" />
+                <line x1="4" y1="10" x2="4" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12" y2="3" />
+                <line x1="20" y1="21" x2="20" y2="16" />
+                <line x1="20" y1="12" x2="20" y2="3" />
+                <line x1="1" y1="14" x2="7" y2="14" />
+                <line x1="9" y1="8" x2="15" y2="8" />
+                <line x1="17" y1="16" x2="23" y2="16" />
+              </svg>
+              {hasExtraFilters && <span className={styles.filterDot} aria-hidden="true" />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Collapsible Secondary Filters Drawer (Staff Only) ────────────── */}
+      {!isPatient && showFilters && (
+        <div className={styles.filterDrawer}>
+          <div className={styles.filterGroup}>
+            <label className={styles.filterLabel} htmlFor="filter-range">Schedule</label>
+            <select
+              id="filter-range"
+              className="form-input"
+              value={filters.date ? '' : filters.range}
+              onChange={(e) => handleFilterChange('range', e.target.value)}
+            >
+              {filters.date && <option value="">Selected Date</option>}
+              {RANGE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
@@ -419,7 +625,7 @@ export default function AppointmentsPage() {
             />
           </div>
 
-          {user?.role === 'admin' && (
+          {(user?.role === 'admin' || user?.role === 'receptionist') && (
             <div className={styles.filterGroup}>
               <label className={styles.filterLabel} htmlFor="filter-doctor">Doctor</label>
               <select
@@ -437,36 +643,201 @@ export default function AppointmentsPage() {
             </div>
           )}
 
-          <div style={{ alignSelf: 'flex-end' }}>
+          <div className={styles.filterAction}>
             <button
               className={styles.clearBtn}
               onClick={() => {
-                setFilters({ status: '', date: '', doctor_id: '' });
+                setSearchInput('');
+                setFilters({ status: '', range: 'upcoming', date: '', doctor_id: '', search: '' });
                 setPage(1);
               }}
               type="button"
             >
-              <svg style={{ width: 12, height: 12, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }} viewBox="0 0 24 24">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
+              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
               </svg>
               <span>Reset Filters</span>
             </button>
           </div>
         </div>
-      </div>
+      )}
 
+      {/* ── Appointments List Card ───────────────────────────────────────── */}
       {loading ? (
         <div className="flex justify-center items-center" style={{ padding: 'var(--space-12)' }}>
           <div className="spinner" style={{ width: 32, height: 32 }} />
         </div>
+      ) : appointments.length === 0 ? (
+        <div className={styles.emptyCard}>
+          <p className={styles.emptyTitle}>
+            {isHistory ? 'No appointment history found' : 'No appointments found'}
+          </p>
+          <p className={styles.emptySubtitle}>
+            {isHistory
+              ? 'Completed and cancelled consultations will appear here.'
+              : 'Try adjusting your filters or book a new appointment.'}
+          </p>
+        </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={appointments}
-          pagination={pagination}
-          onPageChange={setPage}
-        />
+        <>
+          <div className={styles.listCard}>
+            <div className={styles.listHeader} role="row">
+              <span>Time</span>
+              <span>Date</span>
+              <span>{isPatient ? 'Doctor' : 'Patient'}</span>
+              <span>{isPatient ? 'Specialty' : 'Doctor'}</span>
+              <span>Status</span>
+              <span className={styles.headerActionsCol}>Actions</span>
+            </div>
+            {appointments.map((row) => (
+              <div key={row.appointment_id} className={styles.listRow}>
+                <div className={styles.colTime}>{formatTime(row.date_time)}</div>
+
+                <div className={styles.colDate}>{formatDate(row.date_time)}</div>
+
+                <div className={styles.colPrimary}>
+                  {isPatient
+                    ? row.doctor?.name || 'Physician'
+                    : row.patient?.name || '—'}
+                </div>
+
+                <div className={styles.colSecondary}>
+                  {isPatient
+                    ? row.doctor?.specialization || 'Consultation'
+                    : row.doctor?.name || '—'}
+                </div>
+
+                <div className={styles.rowStatus}>{renderStatusBadge(row.status)}</div>
+
+                <div className={styles.rowActions}>
+                  {canWrite && row.status !== 'cancelled' && (
+                    <>
+                      {isDoctor && row.status === 'scheduled' && (
+                        <button
+                          className={`${styles.iconActionBtn} ${styles.iconActionSuccess}`}
+                          onClick={() => handleFinish(row)}
+                          type="button"
+                          aria-label="Finish"
+                          title="Finish appointment and add clinical entry"
+                        >
+                          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </button>
+                      )}
+                      {row.status === 'completed' &&
+                        (isDoctor || user?.role === 'admin' || user?.role === 'receptionist') && (
+                          <button
+                            className={`${styles.iconActionBtn} ${styles.iconActionAccent}`}
+                            onClick={() => setReportAppointment(row)}
+                            type="button"
+                            aria-label="View Report"
+                            title="View consultation report"
+                          >
+                            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                              <line x1="16" y1="13" x2="8" y2="13" />
+                              <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                          </button>
+                        )}
+                      <button
+                        className={styles.iconActionBtn}
+                        onClick={() => handleEdit(row)}
+                        type="button"
+                        aria-label="Edit"
+                        title="Edit appointment details"
+                      >
+                        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                      {row.status === 'scheduled' && (
+                        <button
+                          className={`${styles.iconActionBtn} ${styles.iconActionDanger}`}
+                          onClick={() => handleCancel(row)}
+                          type="button"
+                          aria-label="Cancel"
+                          title="Cancel appointment"
+                        >
+                          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {isPatient && row.status === 'scheduled' && (
+                    <button
+                      className={`${styles.iconActionBtn} ${styles.iconActionDanger}`}
+                      onClick={() => handleCancel(row)}
+                      type="button"
+                      aria-label="Cancel"
+                      title="Cancel appointment"
+                    >
+                      <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  )}
+                  {isPatient && row.status === 'completed' && (
+                    <button
+                      className={`${styles.iconActionBtn} ${styles.iconActionAccent}`}
+                      onClick={() => setReportAppointment(row)}
+                      type="button"
+                      aria-label="View Report"
+                      title="View consultation report"
+                    >
+                      <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {pagination.totalPages > 1 && (
+            <div className={styles.paginationBar}>
+              <button
+                type="button"
+                className={styles.pageIconBtn}
+                onClick={() => setPage(page - 1)}
+                disabled={page <= 1}
+                aria-label="Previous page"
+                title="Previous page"
+              >
+                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <span className="pagination-info">
+                {pagination.page || page} / {pagination.totalPages}
+              </span>
+              <button
+                type="button"
+                className={styles.pageIconBtn}
+                onClick={() => setPage(page + 1)}
+                disabled={page >= pagination.totalPages}
+                aria-label="Next page"
+                title="Next page"
+              >
+                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── Booking / Edit Modal ─────────────────────────────────────────── */}
@@ -552,7 +923,7 @@ export default function AppointmentsPage() {
               name="booking_date"
               type="date"
               className="form-input"
-              min={new Date().toISOString().split('T')[0]}
+              min={getLocalDateString()}
               value={bookingDate}
               onChange={(e) => {
                 setBookingDate(e.target.value);
@@ -573,6 +944,7 @@ export default function AppointmentsPage() {
                 <div className={styles.availabilityLegend}>
                   <span><span className={styles.legendDotAvailable} /> Available</span>
                   <span><span className={styles.legendDotBooked} /> Booked</span>
+                  <span><span className={styles.legendDotPast} /> Passed</span>
                 </div>
               </div>
 
@@ -589,11 +961,20 @@ export default function AppointmentsPage() {
                 <div className={styles.slotGrid}>
                   {availabilitySlots.map((slot) => {
                     const isSelected = selectedSlot?.dateTime === slot.dateTime;
+                    const isPast = slot.reason === 'Past' || new Date(slot.dateTime).getTime() <= Date.now();
+                    const isAvailable = Boolean(slot.available) && !isPast;
+                    const slotStatusLabel = isSelected
+                      ? 'Selected'
+                      : !slot.available && slot.reason !== 'Past'
+                      ? 'Booked'
+                      : isPast
+                      ? 'Passed'
+                      : 'Open';
                     return (
                       <button
                         key={slot.time}
                         type="button"
-                        disabled={!slot.available}
+                        disabled={!isAvailable}
                         onClick={() => {
                           setSelectedSlot(slot);
                           setFormErrors((prev) => ({ ...prev, date_time: null }));
@@ -601,16 +982,20 @@ export default function AppointmentsPage() {
                         className={`${styles.slotBtn} ${
                           isSelected
                             ? styles.slotBtnSelected
-                            : slot.available
+                            : isAvailable
                             ? styles.slotBtnAvailable
                             : styles.slotBtnBooked
                         }`}
-                        title={slot.available ? `Book slot at ${slot.time}` : 'Booked / Unavailable'}
+                        title={
+                          isAvailable
+                            ? `Book slot at ${slot.time}`
+                            : isPast
+                            ? `Time ${slot.time} has already passed`
+                            : 'Booked / Unavailable'
+                        }
                       >
                         <span className={styles.slotTime}>{slot.time}</span>
-                        <span className={styles.slotStatus}>
-                          {slot.available ? (isSelected ? 'Selected' : 'Open') : 'Booked'}
-                        </span>
+                        <span className={styles.slotStatus}>{slotStatusLabel}</span>
                       </button>
                     );
                   })}
@@ -647,8 +1032,23 @@ export default function AppointmentsPage() {
                 name="date_time"
                 type="datetime-local"
                 className={`form-input ${formErrors.date_time ? 'error' : ''}`}
-                defaultValue={selectedAppointment?.date_time ? new Date(selectedAppointment.date_time).toISOString().slice(0, 16) : ''}
+                defaultValue={getLocalDateTimeInputValue(selectedAppointment?.date_time)}
               />
+            </div>
+          )}
+
+          {modalMode === 'edit' && canWrite && selectedAppointment?.status !== 'completed' && (
+            <div className="form-group">
+              <label className="form-label" htmlFor="status">Appointment Status</label>
+              <select
+                id="status"
+                name="status"
+                className="form-input"
+                defaultValue={selectedAppointment?.status || 'scheduled'}
+              >
+                <option value="scheduled">Scheduled</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
             </div>
           )}
 
@@ -675,6 +1075,98 @@ export default function AppointmentsPage() {
           </div>
         </form>
       </Modal>
+
+      {/* ── Finish Appointment & Add New Clinical Entry Modal (Doctor Only) ─ */}
+      <Modal
+        isOpen={finishModalOpen}
+        title={`Finish Appointment — ${finishAppointment?.patient?.name || 'Patient'}`}
+        onClose={() => setFinishModalOpen(false)}
+        size="md"
+      >
+        <form onSubmit={handleConfirmFinish} noValidate className={styles.modalForm}>
+          {finishAppointment && (
+            <div className={styles.patientInfoBox}>
+              <div className={styles.patientAvatar}>
+                {finishAppointment.patient?.name
+                  ? finishAppointment.patient.name.slice(0, 2).toUpperCase()
+                  : 'PT'}
+              </div>
+              <div>
+                <div className={styles.patientName}>{finishAppointment.patient?.name || 'Patient'}</div>
+                <div className={styles.patientMeta}>
+                  {formatDate(finishAppointment.date_time)} at {formatTime(finishAppointment.date_time)} • Appointment #{finishAppointment.appointment_id}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <h4 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, margin: 0, color: 'var(--color-text)' }}>
+            Add New Clinical Entry
+          </h4>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="finish-diagnosis">Diagnosis *</label>
+            <input
+              id="finish-diagnosis"
+              className={`form-input ${clinicalErrors.diagnosis ? 'error' : ''}`}
+              placeholder="e.g. Acute bronchitis, Hypertension stage 1"
+              value={clinicalForm.diagnosis}
+              onChange={(e) => {
+                setClinicalForm((prev) => ({ ...prev, diagnosis: e.target.value }));
+                setClinicalErrors((prev) => ({ ...prev, diagnosis: null }));
+              }}
+              required
+            />
+            {clinicalErrors.diagnosis && (
+              <span className="form-error" role="alert">{clinicalErrors.diagnosis}</span>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="finish-prescription">Prescription</label>
+            <textarea
+              id="finish-prescription"
+              className="form-input"
+              rows={2}
+              placeholder="e.g. Amoxicillin 500mg tid x 7 days"
+              value={clinicalForm.prescription}
+              onChange={(e) => setClinicalForm((prev) => ({ ...prev, prescription: e.target.value }))}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="finish-notes">Clinical Notes</label>
+            <textarea
+              id="finish-notes"
+              className="form-input"
+              rows={2}
+              placeholder="Additional clinical observations or follow-up instructions..."
+              value={clinicalForm.notes}
+              onChange={(e) => setClinicalForm((prev) => ({ ...prev, notes: e.target.value }))}
+            />
+          </div>
+
+          <div className={styles.modalFooter}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setFinishModalOpen(false)}
+              disabled={finishingAppointment}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={finishingAppointment}>
+              {finishingAppointment ? 'Saving...' : 'Finish & Save Clinical Entry'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <AppointmentReportModal
+        isOpen={Boolean(reportAppointment)}
+        appointment={reportAppointment}
+        onClose={() => setReportAppointment(null)}
+      />
     </div>
   );
 }

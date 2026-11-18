@@ -1,0 +1,150 @@
+/* ─── Consultation Report Modal Styles (Minimal Reference Layout) ───────── */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.topRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.diagnosis {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.subMetaRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.doctorRow,
+.patientRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.doctorRow svg {
+  width: 14px;
+  height: 14px;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.patientRow svg {
+  width: 13px;
+  height: 13px;
+  stroke: var(--color-text-dim);
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.dateText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 3px;
+}
+
+.dateText svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.detailRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rxIcon {
+  width: 16px;
+  height: 16px;
+  stroke: var(--color-accent);
+  stroke-width: 1.9;
+  fill: none;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.rxLines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rxLine {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.notesIcon {
+  width: 15px;
+  height: 15px;
+  stroke: var(--color-text-dim);
+  stroke-width: 1.9;
+  fill: none;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.notesText {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.emptyText {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
