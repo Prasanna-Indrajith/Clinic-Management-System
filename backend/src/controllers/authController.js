@@ -1,57 +1,32 @@
 'use strict';
 
-const { User, Patient } = require('../models');
+const { User } = require('../models');
 const logger = require('../config/logger');
 const { generateToken } = require('../utils/token');
 const audit = require('../utils/auditLog');
+const { createAccountWithProfile } = require('../services/userService');
 
 /**
- * Register a new user with bcrypt-hashed password
+ * Create a new user account (Admin or Receptionist only)
  */
 const register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
-
-    // Check if email already registered
-    const existing = await User.findOne({ where: { email } });
-    if (existing) {
-      return res.status(409).json({ error: 'Email already registered' });
-    }
-
-    // Create user (password is hashed automatically by User model hook)
-    const user = await User.create({
-      name,
-      email,
-      password_hash: password,
-      role: role || 'patient',
-    });
-
-    if (user.role === 'patient') {
-      await Patient.create({
-        user_id: user.user_id,
-        name: user.name,
-        dob: '2000-01-01',
-        contact: 'Pending update',
-      });
-    }
-
     const ipAddress = req.ip || req.socket.remoteAddress;
-    await audit.log({
-      userId: user.user_id,
-      action: 'USER_REGISTERED',
-      entity: 'User',
-      entityId: user.user_id,
+    const user = await createAccountWithProfile(req.body, {
+      actorId: req.user ? req.user.id : null,
+      actorRole: req.user ? req.user.role : null,
       ipAddress,
-      details: { email: user.email, role: user.role },
+      auditAction: 'USER_REGISTERED',
     });
-
-    logger.info(`New user registered: ${user.email} (${user.role})`);
 
     return res.status(201).json({
       message: 'User registered successfully',
       user: user.toJSON(),
     });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
     logger.error('Registration error', { message: err.message });
     return res.status(500).json({ error: 'Internal server error during registration' });
   }

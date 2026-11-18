@@ -1,22 +1,45 @@
 'use strict';
 
+const { Op } = require('sequelize');
 const { User } = require('../models');
 const logger = require('../config/logger');
 const audit = require('../utils/auditLog');
+const { buildSearchClause } = require('../utils/search');
+const {
+    RECEPTIONIST_ALLOWED_ROLES,
+    createAccountWithProfile,
+} = require('../services/userService');
 
 /**
- * List all users (Admin only).
- * Supports pagination and optional role filter.
+ * List users (Admin sees all; Receptionist sees patient and doctor accounts).
+ * Supports pagination, search, and optional role filter.
  */
 const getAllUsers = async (req, res) => {
     try {
         const page = Math.max(1, parseInt(req.query.page, 10) || 1);
         const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
         const offset = (page - 1) * limit;
+        const search = req.query.search || req.query.q || '';
 
         const whereClause = {};
-        if (req.query.role) {
+        if (req.user.role === 'receptionist') {
+            if (req.query.role) {
+                if (!RECEPTIONIST_ALLOWED_ROLES.includes(req.query.role)) {
+                    return res.status(403).json({
+                        error: 'Forbidden: Receptionists can only view patient and doctor accounts.',
+                    });
+                }
+                whereClause.role = req.query.role;
+            } else {
+                whereClause.role = { [Op.in]: RECEPTIONIST_ALLOWED_ROLES };
+            }
+        } else if (req.query.role) {
             whereClause.role = req.query.role;
+        }
+
+        const searchClause = buildSearchClause(search, ['name', 'email']);
+        if (searchClause) {
+            Object.assign(whereClause, searchClause);
         }
 
         const { count, rows } = await User.findAndCountAll({
@@ -39,6 +62,32 @@ const getAllUsers = async (req, res) => {
     } catch (err) {
         logger.error('Error fetching users', { message: err.message });
         return res.status(500).json({ error: 'Failed to retrieve users' });
+    }
+};
+
+/**
+ * Create a new user account (Admin: any role; Receptionist: patient or doctor only).
+ */
+const createUser = async (req, res) => {
+    try {
+        const ipAddress = req.ip || req.socket.remoteAddress;
+        const user = await createAccountWithProfile(req.body, {
+            actorId: req.user ? req.user.id : null,
+            actorRole: req.user ? req.user.role : null,
+            ipAddress,
+            auditAction: 'CREATE_USER',
+        });
+
+        return res.status(201).json({
+            message: 'User created successfully',
+            user: user.toJSON(),
+        });
+    } catch (err) {
+        if (err.status) {
+            return res.status(err.status).json({ error: err.message });
+        }
+        logger.error('Error creating user', { message: err.message });
+        return res.status(500).json({ error: 'Failed to create user' });
     }
 };
 
@@ -123,6 +172,7 @@ const deleteUser = async (req, res) => {
 
 module.exports = {
     getAllUsers,
+    createUser,
     updateUserRole,
     deleteUser,
 };

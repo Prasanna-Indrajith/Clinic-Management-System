@@ -118,13 +118,13 @@ router.get('/:id/availability', doctorController.getDoctorAvailability);
  *       403:
  *         description: Forbidden - admin only
  */
-router.post('/', requireRole(['admin']), createDoctorValidation, doctorController.createDoctor);
+router.post('/', requireRole(['admin', 'receptionist']), createDoctorValidation, doctorController.createDoctor);
 
 /**
  * @openapi
  * /api/doctors/{id}:
  *   put:
- *     summary: Update doctor record (Admin only)
+ *     summary: Update doctor record (Admin or Receptionist)
  *     tags: [Doctors]
  *     parameters:
  *       - in: path
@@ -136,11 +136,11 @@ router.post('/', requireRole(['admin']), createDoctorValidation, doctorControlle
  *       200:
  *         description: Doctor updated successfully
  *       403:
- *         description: Forbidden - admin only
+ *         description: Forbidden
  *       404:
  *         description: Doctor not found
  */
-router.put('/:id', requireRole(['admin']), updateDoctorValidation, doctorController.updateDoctor);
+router.put('/:id', requireRole(['admin', 'receptionist']), updateDoctorValidation, doctorController.updateDoctor);
 
 /**
  * @openapi

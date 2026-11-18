@@ -23,6 +23,22 @@ const registerValidation = [
     .optional()
     .isIn(['admin', 'doctor', 'receptionist', 'patient'])
     .withMessage('Invalid role specified'),
+  body('specialization')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('Specialization must be at most 100 characters'),
+  body('contact')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isLength({ max: 50 })
+    .withMessage('Contact must be at most 50 characters'),
+  body('dob')
+    .optional({ values: 'falsy' })
+    .isISO8601()
+    .withMessage('Date of birth must be a valid date (YYYY-MM-DD)'),
+  body('address').optional({ values: 'falsy' }).trim().isLength({ max: 500 }),
+  body('notes').optional({ values: 'falsy' }).trim().isLength({ max: 1000 }),
   validate,
 ];
 

@@ -23,6 +23,10 @@ const createDoctorValidation = [
   body('contact').trim().notEmpty().withMessage('Contact is required').isLength({ max: 50 }),
   body('email').trim().isEmail().withMessage('Valid email is required').normalizeEmail(),
   body('user_id').optional({ nullable: true }).isInt().withMessage('user_id must be an integer'),
+  body('password')
+    .optional({ values: 'falsy' })
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long'),
   validate,
 ];
 

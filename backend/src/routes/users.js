@@ -7,6 +7,8 @@ const authMiddleware = require('../middleware/authMiddleware');
 const { requireRole } = require('../middleware/roleMiddleware');
 const { body, validationResult } = require('express-validator');
 
+const { registerValidation } = require('../validators/authValidator');
+
 const validate = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -27,14 +29,14 @@ const updateUserValidation = [
     validate,
 ];
 
-// All user endpoints require authentication + admin role
-router.use(authMiddleware, requireRole(['admin']));
+// All user endpoints require authentication
+router.use(authMiddleware);
 
 /**
  * @openapi
  * /api/users:
  *   get:
- *     summary: List all users (Admin only)
+ *     summary: List users (Admin sees all; Receptionist sees patient & doctor accounts)
  *     tags: [Users]
  *     parameters:
  *       - in: query
@@ -50,13 +52,51 @@ router.use(authMiddleware, requireRole(['admin']));
  *         schema:
  *           type: string
  *           enum: [admin, doctor, receptionist, patient]
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
  *     responses:
  *       200:
  *         description: List of users
  *       403:
- *         description: Forbidden - admin only
+ *         description: Forbidden
  */
-router.get('/', userController.getAllUsers);
+router.get('/', requireRole(['admin', 'receptionist']), userController.getAllUsers);
+
+/**
+ * @openapi
+ * /api/users:
+ *   post:
+ *     summary: Create a new user account (Admin any role, Receptionist patient or doctor only)
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, email, password]
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [admin, doctor, receptionist, patient]
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *       403:
+ *         description: Forbidden - insufficient role permissions
+ *       409:
+ *         description: Email already registered
+ */
+router.post('/', requireRole(['admin', 'receptionist']), registerValidation, userController.createUser);
 
 /**
  * @openapi
@@ -87,7 +127,7 @@ router.get('/', userController.getAllUsers);
  *       404:
  *         description: User not found
  */
-router.put('/:id', updateUserValidation, userController.updateUserRole);
+router.put('/:id', requireRole(['admin']), updateUserValidation, userController.updateUserRole);
 
 /**
  * @openapi
@@ -107,6 +147,6 @@ router.put('/:id', updateUserValidation, userController.updateUserRole);
  *       404:
  *         description: User not found
  */
-router.delete('/:id', userController.deleteUser);
+router.delete('/:id', requireRole(['admin']), userController.deleteUser);
 
 module.exports = router;

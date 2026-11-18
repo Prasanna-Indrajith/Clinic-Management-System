@@ -12,9 +12,8 @@ const { loginLimiter } = require('../middleware/rateLimiter');
  * @openapi
  * /api/auth/register:
  *   post:
- *     summary: Register a new user
+ *     summary: Register a new user (Admin or Receptionist only; public signup disabled)
  *     tags: [Auth]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -39,10 +38,20 @@ const { loginLimiter } = require('../middleware/rateLimiter');
  *         description: User registered successfully
  *       400:
  *         description: Validation failed
+ *       401:
+ *         description: Missing or invalid token
+ *       403:
+ *         description: Forbidden - insufficient role permissions
  *       409:
  *         description: Email already registered
  */
-router.post('/register', registerValidation, authController.register);
+router.post(
+  '/register',
+  authMiddleware,
+  requireRole(['admin', 'receptionist']),
+  registerValidation,
+  authController.register
+);
 
 /**
  * @openapi
