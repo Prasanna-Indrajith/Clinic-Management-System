@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   {
     to: '/dashboard',
     label: 'Dashboard',
+    roles: ['admin', 'doctor', 'receptionist'],
     icon: (
       <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -54,9 +55,20 @@ const NAV_ITEMS = [
     ),
   },
   {
+    to: '/appointment-history',
+    label: 'Appointment History',
+    roles: ['patient'],
+    icon: (
+      <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <polyline points="12 7 12 12 15 14" />
+      </svg>
+    ),
+  },
+  {
     to: '/reports',
     label: 'Reports',
-    roles: ['admin', 'doctor'],
+    roles: ['admin', 'doctor', 'receptionist'],
     icon: (
       <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -68,7 +80,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/admin',
-    label: 'Admin',
+    label: 'Admin Panel',
     roles: ['admin'],
     icon: (
       <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
@@ -95,9 +107,8 @@ export default function AppLayout() {
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => !item.roles || (user?.role && item.roles.includes(user.role))
   ).map((item) => {
-    if (user?.role === 'patient') {
-      if (item.to === '/dashboard') return { ...item, label: 'My Portal' };
-      if (item.to === '/appointments') return { ...item, label: 'My Appointments' };
+    if (user?.role === 'patient' && item.to === '/appointments') {
+      return { ...item, label: 'My Appointments' };
     }
     return item;
   });

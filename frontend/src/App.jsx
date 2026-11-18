@@ -1,38 +1,65 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
 
 // Pages
 import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import PatientsPage from './pages/PatientsPage';
 import DoctorsPage from './pages/DoctorsPage';
+import UsersPage from './pages/UsersPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import ReportsPage from './pages/ReportsPage';
 import AdminPage from './pages/AdminPage';
 import NotFoundPage from './pages/NotFoundPage';
 
+function HomeRedirect() {
+  const { user } = useAuth();
+  return <Navigate to={user?.role === 'patient' ? '/appointments' : '/dashboard'} replace />;
+}
+
+function DashboardOrPatientHome() {
+  const { user } = useAuth();
+  if (user?.role === 'patient') {
+    return <Navigate to="/appointments" replace />;
+  }
+  return <DashboardPage />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        {/* Public routes */}
+        {/* Public routes — login only; /register redirects to /login */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/register" element={<Navigate to="/login" replace />} />
 
         {/* Protected routes — require auth */}
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/patients" element={<PatientsPage />} />
-            <Route path="/doctors" element={<DoctorsPage />} />
+            <Route index element={<HomeRedirect />} />
+            <Route path="/dashboard" element={<DashboardOrPatientHome />} />
             <Route path="/appointments" element={<AppointmentsPage />} />
 
-            {/* Reports — Admin and Doctor only */}
-            <Route element={<ProtectedRoute allowedRoles={['admin', 'doctor']} />}>
+            {/* Patient appointment history */}
+            <Route element={<ProtectedRoute allowedRoles={['patient']} />}>
+              <Route path="/appointment-history" element={<AppointmentsPage mode="history" />} />
+            </Route>
+
+            {/* Clinical directory — Staff only (Admin, Doctor, Receptionist) */}
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'doctor', 'receptionist']} />}>
+              <Route path="/patients" element={<PatientsPage />} />
+              <Route path="/doctors" element={<DoctorsPage />} />
+            </Route>
+
+            {/* User directory & creation — Admin only */}
+            <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+              <Route path="/users" element={<UsersPage />} />
+            </Route>
+
+            {/* Reports — Admin, Doctor, and Receptionist */}
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'doctor', 'receptionist']} />}>
               <Route path="/reports" element={<ReportsPage />} />
             </Route>
 

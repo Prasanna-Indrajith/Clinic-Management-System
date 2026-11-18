@@ -50,20 +50,7 @@ export default function SignOutModal({ isOpen, onClose }) {
       size="sm"
     >
       <div className={styles.modalContent}>
-        <div className={styles.iconWrapper} aria-hidden="true">
-          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" className={styles.icon}>
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </div>
-
-        <div className={styles.textGroup}>
-          <h4 className={styles.heading}>Sign out of your session?</h4>
-          <p className={styles.description}>
-            You will be securely signed out of ClinicMate. Any unsaved edits or draft clinical notes will be lost.
-          </p>
-        </div>
+        <p className={styles.heading}>Sign out of your session?</p>
 
         {user && (
           <div className={styles.userCard}>
@@ -86,7 +73,7 @@ export default function SignOutModal({ isOpen, onClose }) {
           <button
             id="btn-cancel-signout"
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
             onClick={onClose}
           >
             Stay Signed In
@@ -94,24 +81,9 @@ export default function SignOutModal({ isOpen, onClose }) {
           <button
             id="btn-confirm-signout"
             type="button"
-            className="btn btn-danger"
+            className="btn btn-danger btn-sm"
             onClick={handleConfirm}
           >
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              stroke="currentColor"
-              strokeWidth="2"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
             Yes, Sign Out
           </button>
         </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import toast from 'react-hot-toast';
@@ -46,7 +46,12 @@ export default function LoginPage() {
         };
         login(userObj, data.token);
         toast.success(`Welcome back, ${userObj.name || 'User'}!`);
-        const destination = location.state?.from?.pathname || '/dashboard';
+        const defaultDest = userObj.role === 'patient' ? '/appointments' : '/dashboard';
+        const fromPath = location.state?.from?.pathname;
+        const destination =
+          fromPath && !(userObj.role === 'patient' && fromPath === '/dashboard')
+            ? fromPath
+            : defaultDest;
         navigate(destination, { replace: true });
       } catch (err) {
         const msg =
@@ -87,7 +92,6 @@ export default function LoginPage() {
         {/* Heading */}
         <div className={styles.headerGroup}>
           <h2 className={styles.heading}>Sign in</h2>
-          <p className={styles.subheading}>Enter your credentials to access your clinic portal</p>
         </div>
 
         {/* Fast-Fill Demo Roles */}
@@ -183,11 +187,6 @@ export default function LoginPage() {
             <span>{loading ? 'Authenticating…' : 'Sign in'}</span>
           </button>
         </form>
-
-        <p className={styles.switch}>
-          Don't have an account?{' '}
-          <Link to="/register">Sign up</Link>
-        </p>
       </div>
     </div>
   );

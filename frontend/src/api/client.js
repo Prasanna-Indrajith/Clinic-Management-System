@@ -46,7 +46,6 @@ export default api;
 
 export const authApi = {
   login: (credentials) => api.post('/auth/login', credentials),
-  register: (userData) => api.post('/auth/register', userData),
   getMe: () => api.get('/auth/me'),
 };
 
@@ -61,6 +60,9 @@ export const patientsApi = {
 export const doctorsApi = {
   list: (params = {}) => api.get('/doctors', { params }),
   get: (id) => api.get(`/doctors/${id}`),
+  create: (data) => api.post('/doctors', data),
+  update: (id, data) => api.put(`/doctors/${id}`, data),
+  delete: (id) => api.delete(`/doctors/${id}`),
   getAvailability: (id, params = {}) => api.get(`/doctors/${id}/availability`, { params }),
 };
 
@@ -69,6 +71,7 @@ export const appointApi = {
   get: (id) => api.get(`/appointments/${id}`),
   create: (data) => api.post('/appointments', data),
   update: (id, data) => api.put(`/appointments/${id}`, data),
+  complete: (id, data = {}) => api.patch(`/appointments/${id}/complete`, data),
   cancel: (id) => api.patch(`/appointments/${id}/cancel`),
 };
 
@@ -81,12 +84,14 @@ export const reportsApi = {
 
 export const usersApi = {
   list: (params = {}) => api.get('/users', { params }),
+  create: (data) => api.post('/users', data),
   updateRole: (id, role) => api.put(`/users/${id}`, { role }),
   delete: (id) => api.delete(`/users/${id}`),
 };
 
 export const medicalRecordsApi = {
   list: (patientId) => api.get(`/medical-records/${patientId}`),
+  getByAppointment: (appointmentId) => api.get(`/medical-records/appointment/${appointmentId}`),
   create: (patientId, data) => api.post(`/medical-records/${patientId}`, data),
 };
 

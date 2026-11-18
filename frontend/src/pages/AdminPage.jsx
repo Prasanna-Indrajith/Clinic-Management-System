@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { usersApi } from '../api/client';
 import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
+import AddUserModal from '../components/forms/AddUserModal';
 import toast from 'react-hot-toast';
 import styles from './AdminPage.module.css';
 
@@ -18,16 +19,22 @@ export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [newRole, setNewRole] = useState('');
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await usersApi.list({ page, limit: 10 });
+      const params = { page, limit: 10 };
+      if (search) params.search = search;
+      if (roleFilter) params.role = roleFilter;
+      const { data } = await usersApi.list(params);
       setUsers(data.data || []);
       setPagination(data.pagination || { page, limit: 10, total: 0, totalPages: 1 });
     } catch (err) {
@@ -35,7 +42,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, search, roleFilter]);
 
   useEffect(() => {
     fetchUsers();
@@ -130,13 +137,13 @@ export default function AdminPage() {
               className={styles.deleteBtn}
               onClick={() => handleDelete(row)}
               type="button"
+              aria-label="Delete user"
               title="Revoke and delete account"
             >
               <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
               </svg>
-              <span>Delete</span>
             </button>
           )}
         </div>
@@ -148,16 +155,27 @@ export default function AdminPage() {
     <div className={styles.container}>
       <header className={styles.pageHeader}>
         <div>
-          <h1 className={styles.headerTitle}>System Admin & Role Governance</h1>
-          <p className={styles.headerSubtitle}>
-            Manage authenticated clinical accounts, role privileges, and security boundaries.
-          </p>
+          <h1 className={styles.headerTitle}>Admin Panel</h1>
         </div>
-        <div className={styles.adminBadge}>
-          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-          </svg>
-          <span>Admin Clearance Active</span>
+        <div className={styles.headerActions}>
+          <div className={styles.adminBadge}>
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            <span>Admin Clearance Active</span>
+          </div>
+          <button
+            id="btn-admin-add-user"
+            type="button"
+            className={`btn btn-primary ${styles.headerActionBtn}`}
+            onClick={() => setAddModalOpen(true)}
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>Add User</span>
+          </button>
         </div>
       </header>
 
@@ -194,6 +212,32 @@ export default function AdminPage() {
       <div className={styles.tableCard}>
         <div className={styles.cardHeader}>
           <h2 className={styles.cardTitle}>User Accounts Directory</h2>
+          <div className={styles.toolbar}>
+            <input
+              type="text"
+              className={`form-input ${styles.searchField}`}
+              placeholder="Search name or email..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+            <select
+              className={`form-input ${styles.filterSelect}`}
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by role"
+            >
+              <option value="">All Roles</option>
+              {ROLE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
         {loading ? (
           <div className="flex justify-center items-center" style={{ padding: 'var(--space-12)' }}>
@@ -230,6 +274,13 @@ export default function AdminPage() {
           </div>
         </form>
       </Modal>
+
+      <AddUserModal
+        isOpen={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        onSuccess={fetchUsers}
+        currentUserRole="admin"
+      />
     </div>
   );
 }
