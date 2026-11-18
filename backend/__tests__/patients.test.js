@@ -235,5 +235,46 @@ describe('Phase 2 — Patient & Doctor Management (02_TEST_PLAN.md §2, §3)', (
       expect(Array.isArray(res.body.data)).toBe(true);
       expect(res.body.data.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('PAT-08 / DOC-04: searches patient and doctor names case-insensitively by first name, last name, or both', async () => {
+      await Patient.create({
+        name: 'Ruwan Bandara',
+        dob: '1985-06-14',
+        contact: '077-987-6543',
+      });
+
+      // Patient first name (lowercase), last name (uppercase), and reversed multi-word
+      for (const query of ['ruwan', 'BANDARA', 'RuWaN BaNdArA', 'bandara ruwan']) {
+        const patRes = await request(app)
+          .get(`/api/patients?search=${encodeURIComponent(query)}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .expect(200);
+
+        expect(patRes.body.data.some((p) => p.name === 'Ruwan Bandara')).toBe(true);
+      }
+
+      // Doctor first name, last name, and multi-word case-insensitive search
+      for (const query of ['james', 'WILSON', 'dr wilson', 'wilson james']) {
+        const docRes = await request(app)
+          .get(`/api/doctors?search=${encodeURIComponent(query)}`)
+          .set('Authorization', `Bearer ${doctorToken}`)
+          .expect(200);
+
+        expect(docRes.body.data.some((d) => d.name === 'Dr. James Wilson')).toBe(true);
+      }
+    });
+
+    it('uses Op.iLike and escapes LIKE wildcards when dialect is postgres', () => {
+      const { Op } = require('sequelize');
+      const { buildSearchClause } = require('../src/utils/search');
+      const dialectSpy = jest.spyOn(sequelize, 'getDialect').mockReturnValue('postgres');
+
+      const clause = buildSearchClause('Ruwan 100%_test', ['name']);
+      expect(clause[Op.and]).toHaveLength(2);
+      expect(clause[Op.and][0][Op.or][0].name[Op.iLike]).toBe('%Ruwan%');
+      expect(clause[Op.and][1][Op.or][0].name[Op.iLike]).toBe('%100\\%\\_test%');
+
+      dialectSpy.mockRestore();
+    });
   });
 });

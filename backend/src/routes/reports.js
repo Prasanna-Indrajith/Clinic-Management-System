@@ -42,9 +42,9 @@ const exportMonthlyValidation = [
   validate,
 ];
 
-// All report endpoints require authentication and either admin or doctor role
+// All report endpoints require authentication and admin, doctor, or receptionist role
 router.use(authMiddleware);
-router.use(requireRole(['admin', 'doctor']));
+router.use(requireRole(['admin', 'doctor', 'receptionist']));
 
 /**
  * @openapi

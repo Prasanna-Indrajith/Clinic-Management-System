@@ -104,31 +104,34 @@ describe('Phase 5 - Reports', () => {
   });
 
   describe('REP-02: Role-based access control (RBAC)', () => {
-    it('receptionist role is forbidden from generating daily reports (403)', async () => {
-      const res = await request(app)
+    it('receptionist role can generate daily and monthly reports (200)', async () => {
+      await request(app)
         .post('/api/reports/daily')
         .set('Authorization', 'Bearer ' + receptionistToken)
         .send({ date: '2026-10-15' })
-        .expect(403);
-      expect(res.body.error).toMatch(/insufficient permissions/i);
+        .expect(200);
+
+      await request(app)
+        .post('/api/reports/monthly')
+        .set('Authorization', 'Bearer ' + receptionistToken)
+        .send({ year: 2026, month: 10 })
+        .expect(200);
     });
 
-    it('patient role is forbidden from generating daily reports (403)', async () => {
-      const res = await request(app)
+    it('patient role is forbidden from generating daily and monthly reports (403)', async () => {
+      const dailyRes = await request(app)
         .post('/api/reports/daily')
         .set('Authorization', 'Bearer ' + patientToken)
         .send({ date: '2026-10-15' })
         .expect(403);
-      expect(res.body.error).toMatch(/insufficient permissions/i);
-    });
+      expect(dailyRes.body.error).toMatch(/insufficient permissions/i);
 
-    it('receptionist role is forbidden from generating monthly reports (403)', async () => {
-      const res = await request(app)
+      const monthlyRes = await request(app)
         .post('/api/reports/monthly')
-        .set('Authorization', 'Bearer ' + receptionistToken)
+        .set('Authorization', 'Bearer ' + patientToken)
         .send({ year: 2026, month: 10 })
         .expect(403);
-      expect(res.body.error).toMatch(/insufficient permissions/i);
+      expect(monthlyRes.body.error).toMatch(/insufficient permissions/i);
     });
   });
 
