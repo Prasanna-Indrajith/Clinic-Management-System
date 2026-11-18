@@ -163,11 +163,12 @@ async function seed() {
       doctors.push(doc);
     }
 
-    // 3. Clear existing appointments and medical records to generate a fresh full-month dataset
-    logger.info('Preparing clean slate for full-month appointments and medical records...');
+    // 3. Clear existing appointments, medical records, patients, and audit logs to remove older data
+    logger.info('Clearing existing appointments, medical records, and previous-month data...');
     await MedicalRecord.destroy({ where: {} });
     await Appointment.destroy({ where: {} });
     await Patient.destroy({ where: {} });
+    await AuditLog.destroy({ where: {} });
 
     // 4. Seed Patients (Authentic Sri Lankan names, locations, and medical backgrounds)
     logger.info('Seeding 12 Sri Lankan patients...');
@@ -265,22 +266,22 @@ async function seed() {
       patients.push(patient);
     }
 
-    // 5. Generate a multi-month dataset of realistic appointments (previous month, current month, and next month)
-    logger.info('Generating multi-month appointment schedule (September, October, and November)...');
-
+    // 5. Generate dataset: 3–5 appointments per doctor per day from Oct 1 to Nov 30
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const currentDay = now.getDate();
+    const seedYear = now.getFullYear();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    logger.info(`Generating schedule (3-5 appointments/doctor/day) for Oct 1 - Nov 30, ${seedYear}...`);
 
     const timeSlots = [
       { hour: 8, minute: 30 },
       { hour: 9, minute: 30 },
-      { hour: 10, minute: 45 },
-      { hour: 11, minute: 45 },
+      { hour: 10, minute: 30 },
+      { hour: 11, minute: 30 },
       { hour: 14, minute: 0 },
-      { hour: 15, minute: 15 },
-      { hour: 16, minute: 30 },
+      { hour: 15, minute: 0 },
+      { hour: 16, minute: 0 },
     ];
 
     const clinicalContexts = [
@@ -354,126 +355,121 @@ async function seed() {
       'Patient requested postponement due to overseas work travel.',
     ];
 
-    let appointmentCount = 0;
-    let medicalRecordCount = 0;
-
     const monthsToSeed = [
-      { offset: -1, name: 'Previous Month' },
-      { offset: 0, name: 'Current Month' },
-      { offset: 1, name: 'Next Month' },
+      { year: seedYear, month: 9, days: 31 },  // October 1 – 31
+      { year: seedYear, month: 10, days: 30 }, // November 1 – 30
     ];
 
-    for (const { offset } of monthsToSeed) {
-      const targetDate = new Date(currentYear, currentMonth + offset, 1);
-      const targetYear = targetDate.getFullYear();
-      const targetMonth = targetDate.getMonth();
-      const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const appointmentsPayload = [];
+    const pendingContexts = [];
 
-      // Seed full days for previous and current month; first 14 days for next month
-      const maxDays = offset === 1 ? Math.min(14, daysInTargetMonth) : daysInTargetMonth;
+    for (const { year: targetYear, month: targetMonth, days: daysInMonth } of monthsToSeed) {
+      for (let day = 1; day <= daysInMonth; day++) {
+        const localDateStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-      for (let day = 1; day <= maxDays; day++) {
-        const dateForDay = new Date(targetYear, targetMonth, day);
-        const dayOfWeek = dateForDay.getDay(); // 0 is Sunday, 6 is Saturday
+        for (let docIdx = 0; docIdx < doctors.length; docIdx++) {
+          const selectedDoctor = doctors[docIdx];
+          // 3 to 5 appointments per doctor per day
+          const dailyCount = 3 + ((day + docIdx + targetMonth) % 3);
 
-        // Determine number of appointments for this day
-        let dailySlots = [];
-        if (dayOfWeek === 0) {
-          // Sunday: 1 morning appointment
-          dailySlots = [timeSlots[1]];
-        } else if (dayOfWeek === 6) {
-          // Saturday: 2 morning appointments
-          dailySlots = [timeSlots[0], timeSlots[2]];
-        } else {
-          // Weekdays: 3 or 4 appointments
-          const count = ((day % 2) === 0) ? 4 : 3;
-          dailySlots = [timeSlots[0], timeSlots[2], timeSlots[4], timeSlots[6]].slice(0, count);
-        }
+          // Choose distinct time slots for this doctor on this day
+          const startOffset = (day + docIdx * 2) % timeSlots.length;
+          const chosenSlots = [];
+          for (let k = 0; k < dailyCount; k++) {
+            chosenSlots.push(timeSlots[(startOffset + k) % timeSlots.length]);
+          }
+          chosenSlots.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute));
 
-        for (let sIdx = 0; sIdx < dailySlots.length; sIdx++) {
-          const slot = dailySlots[sIdx];
-          const apptDate = new Date(targetYear, targetMonth, day, slot.hour, slot.minute, 0, 0);
+          for (let sIdx = 0; sIdx < chosenSlots.length; sIdx++) {
+            const slot = chosenSlots[sIdx];
+            const apptDate = new Date(targetYear, targetMonth, day, slot.hour, slot.minute, 0, 0);
+            const patientIndex = (day * 3 + docIdx * 5 + sIdx * 2 + targetMonth) % patients.length;
+            const selectedPatient = patients[patientIndex];
 
-          // Select doctor and patient cyclically
-          const doctorIndex = (day + sIdx + Math.abs(offset) * 2) % doctors.length;
-          const patientIndex = (day * 2 + sIdx * 3 + Math.abs(offset) * 4) % patients.length;
-          const selectedDoctor = doctors[doctorIndex];
-          const selectedPatient = patients[patientIndex];
+            let status = 'scheduled';
+            let remarks = null;
 
-          // Determine status based on relation to today
-          let status = 'scheduled';
-          let remarks = null;
-
-          if (offset < 0) {
-            // Previous month: strictly past completed (~88%) or cancelled (~12%)
-            const isCancelled = ((day + sIdx) % 8 === 0);
-            if (isCancelled) {
-              status = 'cancelled';
-              remarks = cancellationReasons[(day + sIdx) % cancellationReasons.length];
-            } else {
-              status = 'completed';
-              remarks = 'Consultation successfully completed. Vital signs recorded and treatment issued.';
-            }
-          } else if (offset === 0) {
-            // Current month: relative to current day
-            if (day < currentDay) {
-              const isCancelled = ((day + sIdx) % 7 === 0);
+            if (apptDate < startOfToday) {
+              // Strictly past days: ~85% completed, ~15% cancelled
+              const isCancelled = (day + docIdx + sIdx) % 7 === 0;
               if (isCancelled) {
                 status = 'cancelled';
-                remarks = cancellationReasons[(day + sIdx) % cancellationReasons.length];
+                remarks = cancellationReasons[(day + docIdx + sIdx) % cancellationReasons.length];
               } else {
                 status = 'completed';
-                remarks = 'Consultation successfully completed. Vital signs recorded and treatment issued.';
+                remarks = 'Consultation completed. Vital signs recorded and treatment issued.';
               }
-            } else if (day === currentDay) {
-              // Today: morning completed, afternoon scheduled
-              if (slot.hour < now.getHours() || (slot.hour === now.getHours() && slot.minute <= now.getMinutes())) {
-                status = 'completed';
-                remarks = 'Morning consultation attended on time.';
+            } else if (apptDate <= endOfToday) {
+              // Today: past slots completed/cancelled, upcoming slots scheduled
+              if (apptDate <= now) {
+                const isCancelled = (docIdx + sIdx) % 6 === 0;
+                if (isCancelled) {
+                  status = 'cancelled';
+                  remarks = cancellationReasons[(day + docIdx + sIdx) % cancellationReasons.length];
+                } else {
+                  status = 'completed';
+                  remarks = 'Consultation attended on time.';
+                }
               } else {
                 status = 'scheduled';
-                remarks = 'Checked in at reception; awaiting doctor.';
+                remarks = 'Checked in at reception; awaiting consultation.';
               }
             } else {
-              // Future days in current month: scheduled
-              status = 'scheduled';
-              remarks = 'Pre-booked clinical appointment.';
+              // Future days (up to Nov 30): mostly scheduled, occasional cancelled
+              const isCancelled = (day + docIdx + sIdx) % 11 === 0;
+              if (isCancelled) {
+                status = 'cancelled';
+                remarks = cancellationReasons[(day + docIdx + sIdx) % cancellationReasons.length];
+              } else {
+                status = 'scheduled';
+                remarks = 'Pre-booked clinical appointment.';
+              }
             }
-          } else {
-            // Next month: pre-scheduled advance bookings
-            status = 'scheduled';
-            remarks = 'Advance clinical appointment booking.';
-          }
 
-          await Appointment.create({
-            patient_id: selectedPatient.patient_id,
-            doctor_id: selectedDoctor.doctor_id,
-            date_time: apptDate,
-            status,
-            remarks,
-          });
-          appointmentCount++;
-
-          // If completed, create a corresponding Sri Lankan medical record
-          if (status === 'completed') {
-            const context = clinicalContexts[(day + sIdx) % clinicalContexts.length];
-            const recordDateStr = apptDate.toISOString().split('T')[0];
-
-            await MedicalRecord.create({
+            appointmentsPayload.push({
               patient_id: selectedPatient.patient_id,
               doctor_id: selectedDoctor.doctor_id,
-              diagnosis: context.diagnosis,
-              prescription: context.prescription,
-              notes: context.notes,
-              record_date: recordDateStr,
+              date_time: apptDate,
+              status,
+              remarks,
             });
-            medicalRecordCount++;
+            pendingContexts.push({
+              status,
+              patient_id: selectedPatient.patient_id,
+              doctor_id: selectedDoctor.doctor_id,
+              record_date: localDateStr,
+              context: clinicalContexts[(day + docIdx * 2 + sIdx) % clinicalContexts.length],
+            });
           }
         }
       }
     }
 
-    logger.info(`Successfully created ${appointmentCount} appointments across multi-month schedule (${medicalRecordCount} with completed clinical records).`);
+    const createdAppointments = await Appointment.bulkCreate(appointmentsPayload, { returning: true });
+    const appointmentCount = createdAppointments.length;
+
+    const medicalRecordsPayload = [];
+    for (let i = 0; i < createdAppointments.length; i++) {
+      const meta = pendingContexts[i];
+      if (meta.status === 'completed') {
+        medicalRecordsPayload.push({
+          patient_id: meta.patient_id,
+          doctor_id: meta.doctor_id,
+          appointment_id: createdAppointments[i].appointment_id,
+          diagnosis: meta.context.diagnosis,
+          prescription: meta.context.prescription,
+          notes: meta.context.notes,
+          record_date: meta.record_date,
+        });
+      }
+    }
+
+    await MedicalRecord.bulkCreate(medicalRecordsPayload);
+    const medicalRecordCount = medicalRecordsPayload.length;
+
+    logger.info(
+      `Successfully created ${appointmentCount} appointments across Oct 1 - Nov 30, ${seedYear} (${medicalRecordCount} with completed clinical records).`
+    );
 
     // 6. Seed Realistic Audit Logs
     logger.info('Seeding clinic system audit logs...');
