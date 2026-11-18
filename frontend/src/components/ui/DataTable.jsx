@@ -61,20 +61,30 @@ export default function DataTable({
                                 </td>
                             </tr>
                         ) : (
-                            data.map((row, i) => (
-                                <tr key={row.id || row.patient_id || row.doctor_id || row.appointment_id || i}>
-                                    {columns.map((col) => {
-                                        const cellVal = col.key && col.key.includes('.')
-                                            ? col.key.split('.').reduce((acc, part) => acc?.[part], row)
-                                            : row[col.key];
-                                        return (
-                                            <td key={col.key}>
-                                                {col.render ? col.render(cellVal, row) : (cellVal ?? '—')}
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            ))
+                            data.map((row, i) => {
+                                const rowKey =
+                                    row.appointment_id ??
+                                    row.record_id ??
+                                    row.user_id ??
+                                    row.patient_id ??
+                                    row.doctor_id ??
+                                    row.id ??
+                                    i;
+                                return (
+                                    <tr key={rowKey}>
+                                        {columns.map((col) => {
+                                            const cellVal = col.key && col.key.includes('.')
+                                                ? col.key.split('.').reduce((acc, part) => acc?.[part], row)
+                                                : row[col.key];
+                                            return (
+                                                <td key={col.key}>
+                                                    {col.render ? col.render(cellVal, row) : (cellVal ?? '—')}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+                            })
                         )}
                     </tbody>
                 </table>

@@ -1,12 +1,24 @@
-/* ─── Doctors Page Styles ─────────────────────────────────────────────── */
+/* ─── Doctors Page Styles (Minimal List) ────────────────────────────────── */
+
+.pageContainer {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
 
 .pageHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: var(--space-4);
-  margin-bottom: var(--space-6);
+}
+
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .headerTitle {
@@ -18,78 +30,403 @@
   margin: 0;
 }
 
-.headerSubtitle {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  margin-top: var(--space-1);
-}
-
-.searchCard {
+.countBadge {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semi);
+  padding: 2px 10px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4) var(--space-5);
-  margin-bottom: var(--space-6);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-full);
 }
 
-.searchWrapper {
-  position: relative;
-  display: flex;
+.headerActionBtn {
+  height: 38px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  display: inline-flex;
   align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  flex-shrink: 0;
+  box-shadow: none;
 }
 
-.searchIcon {
-  position: absolute;
-  left: var(--space-3);
-  width: 18px;
-  height: 18px;
-  stroke: var(--color-text-dim);
-  stroke-width: 2;
+.headerActionBtn svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 2.2;
   fill: none;
-  pointer-events: none;
 }
 
-.searchInput {
-  padding-left: 2.5rem !important;
-}
-
-.doctorCell {
+/* ── Search & Sort Toolbar ───────────────────────────────────────────────── */
+.toolbar {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
 
-.doctorAvatar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
-  background: var(--color-accent-glow);
-  color: var(--color-accent);
+.searchBar {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
-  font-weight: var(--font-bold);
-  font-family: var(--font-display);
-  border: 1px solid rgba(56, 178, 172, 0.3);
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-fast);
+}
+
+.searchBar:focus-within {
+  border-color: var(--color-accent);
+}
+
+.searchIcon {
+  width: 16px;
+  height: 16px;
+  stroke: var(--color-text-dim);
+  stroke-width: 2;
+  fill: none;
   flex-shrink: 0;
 }
 
-.doctorName {
-  font-weight: var(--font-medium);
+.searchField {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.searchField::placeholder {
+  color: var(--color-text-dim);
+}
+
+.searchClearBtn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.searchClearBtn:hover {
   color: var(--color-text);
 }
 
-.specBadge {
+.sortBtn {
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  border-radius: var(--radius-full);
-  background: var(--color-accent-glow);
+  justify-content: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.sortBtn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+
+.sortBtn:hover {
+  border-color: var(--color-accent);
   color: var(--color-accent);
-  border: 1px solid rgba(56, 178, 172, 0.25);
+}
+
+/* ── Minimal List Card ───────────────────────────────────────────────────── */
+.listCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.listHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(200px, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 11px;
+  font-weight: var(--font-semi);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.headerNameCol {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.listCountPill {
+  font-size: 11px;
+  font-weight: var(--font-medium);
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.headerActionsCol {
+  text-align: right;
+  min-width: 64px;
+}
+
+.listRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(200px, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  transition: background var(--transition-fast);
+}
+
+.listRow:last-child {
+  border-bottom: none;
+}
+
+.listRow:hover {
+  background: var(--color-surface-2);
+}
+
+.rowIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rowName {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSubMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+}
+
+.rowSubMeta svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.rowContactGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rowContact,
+.rowEmail {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  min-width: 0;
+}
+
+.rowContact svg,
+.rowEmail svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.rowEmail span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contactValue {
+  color: var(--color-text);
+  font-family: monospace;
+}
+
+.contactMuted {
+  color: var(--color-text-dim);
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: 64px;
+}
+
+.iconActionBtn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.iconActionBtn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+}
+
+.iconActionBtn:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.iconActionDanger:hover {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.emptyCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+}
+
+.emptyTitle {
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  margin: 0 0 var(--space-1);
+}
+
+.emptySubtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.paginationBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.pageIconBtn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.pageIconBtn svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+
+.pageIconBtn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.pageIconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.modalForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.modalGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.helperText {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .listRow {
+    grid-template-columns: 1fr auto;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+  }
+  .rowContactGroup {
+    grid-column: 1 / -1;
+  }
+  .modalGrid {
+    grid-template-columns: 1fr;
+  }
 }

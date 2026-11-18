@@ -1,12 +1,24 @@
-/* ─── Patients Page Styles ─────────────────────────────────────────────── */
+/* ─── Patients Page Styles (Minimal List) ───────────────────────────────── */
+
+.pageContainer {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
 
 .pageHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: var(--space-4);
-  margin-bottom: var(--space-6);
+}
+
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .headerTitle {
@@ -18,172 +30,638 @@
   margin: 0;
 }
 
-.headerSubtitle {
-  font-size: var(--text-sm);
+.countBadge {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semi);
+  padding: 2px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   color: var(--color-text-muted);
-  margin-top: var(--space-1);
+  border-radius: var(--radius-full);
 }
 
-.headerBtn {
+.headerActionBtn {
+  height: 38px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semi);
-  box-shadow: 0 2px 8px var(--color-accent-glow);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  flex-shrink: 0;
+  box-shadow: none;
 }
 
-.headerBtn svg {
-  width: 16px;
-  height: 16px;
+.headerActionBtn svg {
+  width: 15px;
+  height: 15px;
   stroke: currentColor;
   stroke-width: 2.2;
   fill: none;
 }
 
-/* ── Search Bar Card ─────────────────────────────────────────────────────── */
-.searchCard {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4) var(--space-5);
-  margin-bottom: var(--space-6);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-}
-
-.searchWrapper {
-  position: relative;
+/* ── Search & Sort Toolbar ───────────────────────────────────────────────── */
+.toolbar {
   display: flex;
   align-items: center;
+  gap: var(--space-3);
 }
 
-.searchIcon {
-  position: absolute;
-  left: var(--space-3);
-  width: 18px;
-  height: 18px;
-  stroke: var(--color-text-dim);
-  stroke-width: 2;
-  fill: none;
-  pointer-events: none;
-}
-
-.searchInput {
-  padding-left: 2.5rem !important;
-}
-
-/* ── Actions Group in Table ──────────────────────────────────────────────── */
-.actionGroup {
+.searchBar {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-fast);
 }
 
-.actionBtn {
+.searchBar:focus-within {
+  border-color: var(--color-accent);
+}
+
+.searchIcon {
+  width: 16px;
+  height: 16px;
+  stroke: var(--color-text-dim);
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.searchField {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.searchField::placeholder {
+  color: var(--color-text-dim);
+}
+
+.searchClearBtn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.searchClearBtn:hover {
+  color: var(--color-text);
+}
+
+.sortBtn {
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
+  justify-content: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
   cursor: pointer;
-  border: 1px solid transparent;
+  flex-shrink: 0;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
 }
 
-.actionBtn svg {
-  width: 13px;
-  height: 13px;
+.sortBtn svg {
+  width: 16px;
+  height: 16px;
   stroke: currentColor;
   stroke-width: 2;
   fill: none;
 }
 
-.actionBtnSecondary {
-  background: var(--color-surface-2);
-  color: var(--color-accent);
-  border-color: rgba(56, 178, 172, 0.3);
-}
-
-.actionBtnSecondary:hover {
-  background: var(--color-accent-glow);
+.sortBtn:hover {
   border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
-.actionBtnGhost {
-  background: transparent;
-  color: var(--color-text-muted);
-  border-color: var(--color-border);
-}
-
-.actionBtnGhost:hover {
-  color: var(--color-text);
-  background: var(--color-surface-2);
-}
-
-.actionBtnDanger {
-  background: transparent;
-  color: var(--color-danger);
-  border-color: rgba(252, 92, 101, 0.25);
-}
-
-.actionBtnDanger:hover {
-  background: var(--color-danger-bg);
-  border-color: var(--color-danger);
-}
-
-/* ── Medical Records History ─────────────────────────────────────────────── */
-.recordsList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  max-height: 380px;
-  overflow-y: auto;
-  padding-right: var(--space-2);
-}
-
-.recordCard {
-  background: var(--color-surface-2);
+/* ── Minimal List Card ───────────────────────────────────────────────────── */
+.listCard {
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.listHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(160px, 0.8fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 11px;
+  font-weight: var(--font-semi);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.headerNameCol {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
 }
 
-.recordHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.listCountPill {
+  font-size: 11px;
+  font-weight: var(--font-medium);
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
 }
 
-.recordDiagnosis {
+.headerActionsCol {
+  text-align: right;
+  min-width: 96px;
+}
+
+.listRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(160px, 0.8fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  transition: background var(--transition-fast);
+}
+
+.listRow:last-child {
+  border-bottom: none;
+}
+
+.listRow:hover {
+  background: var(--color-surface-2);
+}
+
+.rowIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rowName {
   font-size: var(--text-sm);
   font-weight: var(--font-semi);
   color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.recordDate {
+.rowSubMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--text-xs);
   color: var(--color-text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
-.recordPrescription {
+.rowSubMeta svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.rowContact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--color-text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rowContact svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.contactValue {
+  color: var(--color-text);
+  font-family: monospace;
   font-size: var(--text-xs);
+}
+
+.contactMuted {
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: 96px;
+}
+
+.iconActionBtn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.iconActionBtn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+}
+
+.iconActionBtn:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.iconActionAccent {
   color: var(--color-accent);
+}
+
+.iconActionAccent:hover {
   background: var(--color-accent-glow);
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  display: inline-block;
+  color: var(--color-accent);
+}
+
+.iconActionDanger:hover {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.emptyCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+}
+
+.emptyTitle {
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  margin: 0 0 var(--space-1);
+}
+
+.emptySubtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.paginationBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.pageIconBtn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.pageIconBtn svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+
+.pageIconBtn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.pageIconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Medical Records Modal (Clean & Readable) ───────────────────────────── */
+.recordsModalBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-height: 70vh;
+}
+
+.recordsSummaryBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.recordsMetaChips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.recordsMetaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.recordsMetaItem svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.recordsCountTag {
+  font-size: 11px;
+  font-weight: var(--font-semi);
+  color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+}
+
+.recordToggleBtn,
+.recordToggleBtnGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.recordToggleBtn {
+  background: var(--color-accent);
+  color: var(--color-btn-primary-text);
+  border: 1px solid var(--color-accent);
+}
+
+.recordToggleBtn:hover {
+  background: var(--color-accent-2);
+  border-color: var(--color-accent-2);
+}
+
+.recordToggleBtn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  fill: none;
+}
+
+.recordToggleBtnGhost {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.recordToggleBtnGhost:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.addRecordForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.addRecordHeader {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.addRecordActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.recordsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.recordItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.recordItem:first-child {
+  padding-top: var(--space-2);
+}
+
+.recordItem:last-child {
+  border-bottom: none;
+  padding-bottom: var(--space-1);
+}
+
+.recordTopRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.recordTitleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recordDiagnosis {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.recordDateText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.recordDateText svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.recordDoctorRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.recordDoctorRow svg {
+  width: 14px;
+  height: 14px;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.recordDetailRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rxIcon {
+  width: 16px;
+  height: 16px;
+  stroke: var(--color-accent);
+  stroke-width: 1.9;
+  fill: none;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.rxLines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rxLine {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.notesIcon {
+  width: 15px;
+  height: 15px;
+  stroke: var(--color-text-dim);
+  stroke-width: 1.9;
+  fill: none;
+  flex-shrink: 0;
+  margin-top: 3px;
 }
 
 .recordNotes {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.recordsEmpty {
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.recordsEmptyTitle {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  margin: 0 0 var(--space-1);
+}
+
+.recordsEmptySub {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  line-height: var(--leading-normal);
+  margin: 0;
 }
 
 /* ── Modal Form ──────────────────────────────────────────────────────────── */
@@ -210,6 +688,14 @@
 }
 
 @media (max-width: 640px) {
+  .listRow {
+    grid-template-columns: 1fr auto;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+  }
+  .rowContact {
+    grid-column: 1 / -1;
+  }
   .modalGrid {
     grid-template-columns: 1fr;
   }

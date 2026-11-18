@@ -20,9 +20,6 @@ const MONTHS = [
   { value: '12', label: 'December' },
 ];
 
-/**
- * Returns formatted YYYY-MM-DD for a given date in local timezone
- */
 const formatLocalDate = (d = new Date()) => {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -32,92 +29,90 @@ const formatLocalDate = (d = new Date()) => {
 
 export default function ReportsPage() {
   const { user } = useAuth();
-  const canRead = user?.role === 'admin' || user?.role === 'doctor';
+  const canRead =
+    user?.role === 'admin' || user?.role === 'doctor' || user?.role === 'receptionist';
   const isDoctor = user?.role === 'doctor';
 
+  const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'monthly'
   const [loadingDaily, setLoadingDaily] = useState(false);
   const [loadingMonthly, setLoadingMonthly] = useState(false);
-  const [exportingDaily, setExportingDaily] = useState(null); // 'pdf' | 'csv' | null
-  const [exportingMonthly, setExportingMonthly] = useState(null); // 'pdf' | 'csv' | null
+  const [exportingDaily, setExportingDaily] = useState(null);
+  const [exportingMonthly, setExportingMonthly] = useState(null);
 
   const [dailyData, setDailyData] = useState(null);
   const [monthlyData, setMonthlyData] = useState(null);
-  const [error, setError] = useState(null);
+  const [dailyError, setDailyError] = useState(null);
+  const [monthlyError, setMonthlyError] = useState(null);
 
-  // Default to today in user's local timezone
-  const [dailyDate, setDailyDate] = useState(formatLocalDate(new Date()));
-  const [monthYear, setMonthYear] = useState(String(new Date().getFullYear()));
-  const [monthMonth, setMonthMonth] = useState(String(new Date().getMonth() + 1));
+  const [dailyDate, setDailyDate] = useState(() => formatLocalDate(new Date()));
+  const [monthYear, setMonthYear] = useState(() => String(new Date().getFullYear()));
+  const [monthMonth, setMonthMonth] = useState(() => String(new Date().getMonth() + 1));
 
-  // Table sorting & pagination state
   const [dailySortKey, setDailySortKey] = useState('date_time');
   const [dailySortDir, setDailySortDir] = useState('asc');
   const [dailyPage, setDailyPage] = useState(1);
   const pageSize = 10;
 
-  const handleDaily = async () => {
-    if (!dailyDate) {
-      toast.error('Please select a date');
-      return;
-    }
-    setLoadingDaily(true);
-    setError(null);
-    setDailyPage(1);
-    try {
-      const res = await reportsApi.daily({ date: dailyDate });
-      setDailyData(res.data?.data || res.data);
-    } catch (err) {
-      setError(err.message || 'Failed to generate daily report');
-      setDailyData(null);
-    } finally {
-      setLoadingDaily(false);
-    }
-  };
-
-  const handleMonthly = async () => {
-    if (!monthYear || !monthMonth) {
-      toast.error('Please select year and month');
-      return;
-    }
-    setLoadingMonthly(true);
-    setError(null);
-    try {
-      const res = await reportsApi.monthly({ year: parseInt(monthYear, 10), month: parseInt(monthMonth, 10) });
-      setMonthlyData(res.data?.data || res.data);
-    } catch (err) {
-      setError(err.message || 'Failed to generate monthly report');
-      setMonthlyData(null);
-    } finally {
-      setLoadingMonthly(false);
-    }
-  };
-
-  // Automatically fetch reports on initial load so the page is populated immediately
   useEffect(() => {
-    let isMounted = true;
-    if (canRead && dailyDate) {
-      reportsApi.daily({ date: dailyDate })
-        .then((res) => {
-          if (isMounted) setDailyData(res.data?.data || res.data);
-        })
-        .catch(() => {});
-    }
-    if (canRead && monthYear && monthMonth) {
-      reportsApi.monthly({ year: parseInt(monthYear, 10), month: parseInt(monthMonth, 10) })
-        .then((res) => {
-          if (isMounted) setMonthlyData(res.data?.data || res.data);
-        })
-        .catch(() => {});
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [canRead, dailyDate, monthYear, monthMonth]);
+    if (!canRead || !dailyDate) return;
+    let isCurrent = true;
+    setLoadingDaily(true);
+    setDailyError(null);
+    setDailyPage(1);
 
-  const setDatePreset = (offsetDays) => {
+    reportsApi
+      .daily({ date: dailyDate })
+      .then((res) => {
+        if (isCurrent) setDailyData(res.data?.data || res.data);
+      })
+      .catch((err) => {
+        if (isCurrent) {
+          setDailyError(err.message || 'Failed to load daily report');
+          setDailyData(null);
+        }
+      })
+      .finally(() => {
+        if (isCurrent) setLoadingDaily(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [canRead, dailyDate]);
+
+  useEffect(() => {
+    const yearNum = parseInt(monthYear, 10);
+    const monthNum = parseInt(monthMonth, 10);
+    if (!canRead || !yearNum || yearNum < 2000 || yearNum > 2100 || !monthNum) return;
+
+    let isCurrent = true;
+    setLoadingMonthly(true);
+    setMonthlyError(null);
+
+    reportsApi
+      .monthly({ year: yearNum, month: monthNum })
+      .then((res) => {
+        if (isCurrent) setMonthlyData(res.data?.data || res.data);
+      })
+      .catch((err) => {
+        if (isCurrent) {
+          setMonthlyError(err.message || 'Failed to load monthly report');
+          setMonthlyData(null);
+        }
+      })
+      .finally(() => {
+        if (isCurrent) setLoadingMonthly(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [canRead, monthYear, monthMonth]);
+
+  const getOffsetDate = (offsetDays) => {
     const d = new Date();
     d.setDate(d.getDate() + offsetDays);
-    setDailyDate(formatLocalDate(d));
+    return formatLocalDate(d);
   };
 
   const downloadBlob = (blob, filename) => {
@@ -139,8 +134,7 @@ export default function ReportsPage() {
     setExportingDaily(format);
     try {
       const response = await reportsApi.exportDaily({ date: dailyDate, format });
-      const filename = `daily-report-${dailyDate}.${format}`;
-      downloadBlob(new Blob([response.data]), filename);
+      downloadBlob(new Blob([response.data]), `daily-report-${dailyDate}.${format}`);
       toast.success(`Daily report exported as ${format.toUpperCase()}`);
     } catch (err) {
       toast.error(`Export failed: ${err.message || 'Unknown error'}`);
@@ -162,8 +156,7 @@ export default function ReportsPage() {
         format,
       });
       const monthPadded = String(monthMonth).padStart(2, '0');
-      const filename = `monthly-report-${monthYear}-${monthPadded}.${format}`;
-      downloadBlob(new Blob([response.data]), filename);
+      downloadBlob(new Blob([response.data]), `monthly-report-${monthYear}-${monthPadded}.${format}`);
       toast.success(`Monthly report exported as ${format.toUpperCase()}`);
     } catch (err) {
       toast.error(`Export failed: ${err.message || 'Unknown error'}`);
@@ -176,11 +169,36 @@ export default function ReportsPage() {
     const s = (status || '').toLowerCase();
     switch (s) {
       case 'scheduled':
-        return <span className={`${styles.statusPill} ${styles.statusScheduled}`}>Scheduled</span>;
+        return (
+          <span className={`${styles.statusPill} ${styles.statusScheduled}`}>
+            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <polyline points="12 7 12 12 15 14" />
+            </svg>
+            <span>Scheduled</span>
+          </span>
+        );
       case 'completed':
-        return <span className={`${styles.statusPill} ${styles.statusCompleted}`}>Completed</span>;
+        return (
+          <span className={`${styles.statusPill} ${styles.statusCompleted}`}>
+            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <polyline points="9 12 11 14 15 10" />
+            </svg>
+            <span>Completed</span>
+          </span>
+        );
       case 'cancelled':
-        return <span className={`${styles.statusPill} ${styles.statusCancelled}`}>Cancelled</span>;
+        return (
+          <span className={`${styles.statusPill} ${styles.statusCancelled}`}>
+            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            <span>Cancelled</span>
+          </span>
+        );
       default:
         return <span className="badge badge-info">{status}</span>;
     }
@@ -194,26 +212,42 @@ export default function ReportsPage() {
       render: (val, row) => {
         const dt = val || row?.date_time;
         if (!dt) return '—';
-        return <span style={{ fontFamily: 'monospace', fontSize: 'var(--text-xs)' }}>{new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>;
+        return (
+          <span style={{ fontFamily: 'monospace', fontSize: 'var(--text-xs)' }}>
+            {new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        );
       },
     },
     {
       key: 'patient.name',
       label: 'Patient',
       sortable: true,
-      render: (val, row) => <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>{val || row?.patient?.name || '—'}</span>,
+      render: (val, row) => (
+        <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>
+          {val || row?.patient?.name || '—'}
+        </span>
+      ),
     },
     {
       key: 'patient.contact',
       label: 'Contact',
       sortable: false,
-      render: (val, row) => <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{val || row?.patient?.contact || '—'}</span>,
+      render: (val, row) => (
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+          {val || row?.patient?.contact || '—'}
+        </span>
+      ),
     },
     {
       key: 'doctor.name',
       label: 'Doctor',
       sortable: true,
-      render: (val, row) => <span style={{ color: 'var(--color-text-muted)' }}>{val || row?.doctor?.name ? `Dr. ${val || row?.doctor?.name}` : '—'}</span>,
+      render: (val, row) => (
+        <span style={{ color: 'var(--color-text-muted)' }}>
+          {val || row?.doctor?.name || '—'}
+        </span>
+      ),
     },
     {
       key: 'status',
@@ -223,25 +257,30 @@ export default function ReportsPage() {
     },
   ];
 
-  // Sort and paginate daily appointments
   const sortedDailyAppointments = useMemo(() => {
     if (!dailyData?.appointments) return [];
     const appts = [...dailyData.appointments];
     if (!dailySortKey) return appts;
 
     appts.sort((a, b) => {
-      let valA = dailySortKey.includes('.')
+      const valA = dailySortKey.includes('.')
         ? dailySortKey.split('.').reduce((acc, p) => acc?.[p], a)
         : a[dailySortKey];
-      let valB = dailySortKey.includes('.')
+      const valB = dailySortKey.includes('.')
         ? dailySortKey.split('.').reduce((acc, p) => acc?.[p], b)
         : b[dailySortKey];
 
+      if (valA == null && valB == null) return 0;
       if (valA == null) return 1;
       if (valB == null) return -1;
-      if (valA < valB) return dailySortDir === 'asc' ? -1 : 1;
-      if (valA > valB) return dailySortDir === 'asc' ? 1 : -1;
-      return 0;
+
+      if (dailySortKey === 'date_time') {
+        const diff = new Date(valA).getTime() - new Date(valB).getTime();
+        return dailySortDir === 'asc' ? diff : -diff;
+      }
+
+      const cmp = String(valA).localeCompare(String(valB), undefined, { sensitivity: 'base' });
+      return dailySortDir === 'asc' ? cmp : -cmp;
     });
 
     return appts;
@@ -254,34 +293,59 @@ export default function ReportsPage() {
   );
 
   const monthlyDoctorColumns = [
-    { key: 'name', label: 'Doctor', sortable: true, render: (val, row) => val || row?.name || '—' },
-    { key: 'specialization', label: 'Specialization', sortable: true, render: (val, row) => val || row?.specialization || '—' },
-    { key: 'total', label: 'Total Visits', sortable: true, render: (val, row) => val ?? row?.total ?? 0 },
+    { key: 'name', label: 'Doctor', sortable: false, render: (val, row) => val || row?.name || '—' },
+    { key: 'specialization', label: 'Specialization', sortable: false, render: (val, row) => val || row?.specialization || '—' },
+    { key: 'total', label: 'Visits', sortable: false, render: (val, row) => val ?? row?.total ?? 0 },
   ];
 
   const monthlyPatientColumns = [
-    { key: 'patient_id', label: 'Patient ID', sortable: true, render: (val, row) => val ?? row?.patient_id ?? '—' },
-    { key: 'name', label: 'Patient', sortable: true, render: (val, row) => val || row?.name || '—' },
-    { key: 'total', label: 'Total Visits', sortable: true, render: (val, row) => val ?? row?.total ?? 0 },
+    { key: 'patient_id', label: 'ID', sortable: false, render: (val, row) => val ?? row?.patient_id ?? '—' },
+    { key: 'name', label: 'Patient', sortable: false, render: (val, row) => val || row?.name || '—' },
+    { key: 'total', label: 'Visits', sortable: false, render: (val, row) => val ?? row?.total ?? 0 },
+  ];
+
+  const presets = [
+    { label: 'Yesterday', value: getOffsetDate(-1) },
+    { label: 'Today', value: getOffsetDate(0) },
+    { label: 'Tomorrow', value: getOffsetDate(1) },
   ];
 
   return (
     <div className={styles.container}>
       <div className={styles.pageHeader}>
-        <div>
-          <h1 className={styles.headerTitle}>Reports & Analytics</h1>
-          <p className={styles.headerSubtitle}>
-            Generate operational appointment reports and export high-resolution PDF or CSV documents.
-          </p>
+        <div className={styles.headerLeft}>
+          <h1 className={styles.headerTitle}>Reports</h1>
+          {isDoctor && (
+            <span className={styles.scopeBadge}>
+              <svg className={styles.scopeIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <span>My Consultations</span>
+            </span>
+          )}
         </div>
 
-        {isDoctor && (
-          <div className={styles.scopeBadge}>
-            <svg className={styles.scopeIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-            <span>Doctor Scoped Mode: Filtered to your consultations</span>
+        {canRead && (
+          <div className={styles.tabSwitch} role="tablist" aria-label="Report period">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'daily'}
+              className={`${styles.tabBtn} ${activeTab === 'daily' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('daily')}
+            >
+              Daily
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'monthly'}
+              className={`${styles.tabBtn} ${activeTab === 'monthly' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('monthly')}
+            >
+              Monthly
+            </button>
           </div>
         )}
       </div>
@@ -292,113 +356,88 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {canRead && (
-        <>
-          {/* ── Daily Report Card ─────────────────────────────────────────── */}
-          <div className={styles.reportCard}>
-            <div className={styles.cardHeader}>
-              <h2 className={styles.cardTitle}>
-                <svg className={styles.cardTitleIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                  <line x1="16" y1="2" x2="16" y2="6" />
-                  <line x1="8" y1="2" x2="8" y2="6" />
-                  <line x1="3" y1="10" x2="21" y2="10" />
-                </svg>
-                <span>Daily Appointments Report</span>
-              </h2>
-            </div>
-
-            <div className={styles.controlsRow}>
-              <div className={styles.dateInputGroup}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-1)' }}>
-                  <label className="form-label" style={{ marginBottom: 0 }}>Report Date</label>
-                  <div className={styles.presetGroup}>
-                    <button type="button" className={styles.presetBtn} onClick={() => setDatePreset(-1)}>
-                      Yesterday
-                    </button>
-                    <button type="button" className={styles.presetBtn} onClick={() => setDatePreset(0)}>
-                      Today
-                    </button>
-                    <button type="button" className={styles.presetBtn} onClick={() => setDatePreset(1)}>
-                      Tomorrow
-                    </button>
-                  </div>
-                </div>
+      {canRead && activeTab === 'daily' && (
+        <div className={styles.reportCard}>
+          <div className={styles.toolbar}>
+            <div className={styles.toolbarInputs}>
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel} htmlFor="report-daily-date">Date</label>
                 <input
+                  id="report-daily-date"
                   type="date"
-                  className="form-input"
+                  className={`form-input ${styles.compactInput}`}
                   value={dailyDate}
                   onChange={(e) => setDailyDate(e.target.value)}
                 />
               </div>
 
-              <div className={styles.buttonGroup}>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleDaily}
-                  type="button"
-                  disabled={loadingDaily}
-                >
-                  <span className={styles.btnWithIcon}>
-                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8" />
-                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <span>{loadingDaily ? 'Loading Report...' : 'View Report'}</span>
-                  </span>
-                </button>
-
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => handleExportDaily('pdf')}
-                  type="button"
-                  disabled={exportingDaily === 'pdf'}
-                  title="Download high-resolution PDF document"
-                >
-                  <span className={styles.btnWithIcon}>
-                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="12" y1="18" x2="12" y2="12" />
-                      <line x1="9" y1="15" x2="12" y2="18" />
-                      <line x1="15" y1="15" x2="12" y2="18" />
-                    </svg>
-                    <span>{exportingDaily === 'pdf' ? 'Generating PDF...' : 'Download PDF'}</span>
-                  </span>
-                </button>
-
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => handleExportDaily('csv')}
-                  type="button"
-                  disabled={exportingDaily === 'csv'}
-                  title="Download CSV spreadsheet"
-                >
-                  <span className={styles.btnWithIcon}>
-                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="16" y1="13" x2="8" y2="13" />
-                      <line x1="16" y1="17" x2="8" y2="17" />
-                    </svg>
-                    <span>{exportingDaily === 'csv' ? 'Generating CSV...' : 'Download CSV'}</span>
-                  </span>
-                </button>
+              <div className={styles.fieldGroup}>
+                <span className={styles.fieldLabel}>Quick Select</span>
+                <div className={styles.presetGroup}>
+                  {presets.map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      className={`${styles.presetBtn} ${dailyDate === p.value ? styles.presetBtnActive : ''}`}
+                      onClick={() => setDailyDate(p.value)}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {error && (
-              <div style={{ color: 'var(--color-danger)', marginTop: 'var(--space-4)' }} role="alert">
-                {error}
-              </div>
-            )}
+            <div className={styles.fieldGroup}>
+              <span className={styles.fieldLabel}>Export</span>
+              <div className={styles.buttonGroup}>
+                <button
+                  className={`btn btn-secondary ${styles.exportBtn}`}
+                  onClick={() => handleExportDaily('pdf')}
+                  type="button"
+                  disabled={exportingDaily === 'pdf'}
+                  title="Download PDF"
+                >
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span>{exportingDaily === 'pdf' ? 'Exporting...' : 'PDF'}</span>
+                </button>
 
-            {dailyData && !loadingDaily && (
+                <button
+                  className={`btn btn-secondary ${styles.exportBtn}`}
+                  onClick={() => handleExportDaily('csv')}
+                  type="button"
+                  disabled={exportingDaily === 'csv'}
+                  title="Download CSV"
+                >
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span>{exportingDaily === 'csv' ? 'Exporting...' : 'CSV'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {dailyError && (
+            <div className={styles.errorText} role="alert">
+              {dailyError}
+            </div>
+          )}
+
+          {loadingDaily ? (
+            <div className={styles.loadingState}>
+              <div className="spinner" style={{ width: 24, height: 24 }} />
+            </div>
+          ) : (
+            dailyData && (
               <div className={styles.resultSection}>
-                {/* Metric Summary Ribbon */}
                 <div className={styles.kpiGrid}>
                   <div className={styles.kpiCard}>
-                    <span className={styles.kpiLabel}>Total Appointments</span>
+                    <span className={styles.kpiLabel}>Total</span>
                     <span className={styles.kpiValue}>{dailyData.summary?.total ?? 0}</span>
                   </div>
                   <div className={styles.kpiCard}>
@@ -421,131 +460,120 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                <div style={{ margin: 'var(--space-6) 0 var(--space-3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 className={styles.resultTitle}>
-                    Appointments on {dailyDate} ({sortedDailyAppointments.length} record{sortedDailyAppointments.length === 1 ? '' : 's'})
-                  </h3>
-                  {sortedDailyAppointments.length > 0 && (
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-dim)' }}>
-                      Click column headers to sort
+                <div className={styles.tableSection}>
+                  <div className={styles.sectionHeader}>
+                    <h3 className={styles.sectionTitle}>Appointments — {dailyDate}</h3>
+                    <span className={styles.sectionCount}>
+                      {sortedDailyAppointments.length} {sortedDailyAppointments.length === 1 ? 'record' : 'records'}
                     </span>
-                  )}
+                  </div>
+                  <DataTable
+                    columns={dailyColumns}
+                    data={paginatedAppointments}
+                    pagination={{
+                      page: dailyPage,
+                      limit: pageSize,
+                      total: sortedDailyAppointments.length,
+                      totalPages,
+                    }}
+                    onPageChange={(p) => setDailyPage(p)}
+                    sortKey={dailySortKey}
+                    sortDir={dailySortDir}
+                    onSort={(key, dir) => {
+                      setDailySortKey(key);
+                      setDailySortDir(dir);
+                      setDailyPage(1);
+                    }}
+                  />
                 </div>
-
-                <DataTable
-                  columns={dailyColumns}
-                  data={paginatedAppointments}
-                  pagination={{ page: dailyPage, limit: pageSize, total: sortedDailyAppointments.length, totalPages }}
-                  onPageChange={(p) => setDailyPage(p)}
-                  sortKey={dailySortKey}
-                  sortDir={dailySortDir}
-                  onSort={(key, dir) => {
-                    setDailySortKey(key);
-                    setDailySortDir(dir);
-                  }}
-                />
               </div>
-            )}
-          </div>
+            )
+          )}
+        </div>
+      )}
 
-          {/* ── Monthly Report Card ───────────────────────────────────────── */}
-          <div className={styles.reportCard}>
-            <div className={styles.cardHeader}>
-              <h2 className={styles.cardTitle}>
-                <svg className={styles.cardTitleIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 20V10" />
-                  <path d="M12 20V4" />
-                  <path d="M6 20v-6" />
-                </svg>
-                <span>Monthly Activity Summary</span>
-              </h2>
-            </div>
-
-            <div className={styles.controlsRow}>
-              <div className="form-group" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
-                <label className="form-label">Year</label>
+      {canRead && activeTab === 'monthly' && (
+        <div className={styles.reportCard}>
+          <div className={styles.toolbar}>
+            <div className={styles.toolbarInputs}>
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel} htmlFor="report-month-year">Year</label>
                 <input
+                  id="report-month-year"
                   type="number"
-                  className="form-input"
+                  className={`form-input ${styles.compactInput}`}
+                  style={{ width: 110 }}
                   value={monthYear}
                   onChange={(e) => setMonthYear(e.target.value)}
-                  placeholder="2026"
                   min="2000"
                   max="2100"
                 />
               </div>
-
-              <div className="form-group" style={{ flex: 1, minWidth: 160, marginBottom: 0 }}>
-                <label className="form-label">Month</label>
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel} htmlFor="report-month-select">Month</label>
                 <select
-                  className="form-input"
+                  id="report-month-select"
+                  className={`form-input ${styles.compactInput}`}
+                  style={{ width: 160 }}
                   value={monthMonth}
                   onChange={(e) => setMonthMonth(e.target.value)}
                 >
                   {MONTHS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
                   ))}
                 </select>
               </div>
+            </div>
 
+            <div className={styles.fieldGroup}>
+              <span className={styles.fieldLabel}>Export</span>
               <div className={styles.buttonGroup}>
                 <button
-                  className="btn btn-primary"
-                  onClick={handleMonthly}
-                  type="button"
-                  disabled={loadingMonthly}
-                >
-                  <span className={styles.btnWithIcon}>
-                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8" />
-                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <span>{loadingMonthly ? 'Loading Report...' : 'View Report'}</span>
-                  </span>
-                </button>
-
-                <button
-                  className="btn btn-secondary"
+                  className={`btn btn-secondary ${styles.exportBtn}`}
                   onClick={() => handleExportMonthly('pdf')}
                   type="button"
                   disabled={exportingMonthly === 'pdf'}
-                  title="Download high-resolution PDF document"
+                  title="Download PDF"
                 >
-                  <span className={styles.btnWithIcon}>
-                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="12" y1="18" x2="12" y2="12" />
-                      <line x1="9" y1="15" x2="12" y2="18" />
-                      <line x1="15" y1="15" x2="12" y2="18" />
-                    </svg>
-                    <span>{exportingMonthly === 'pdf' ? 'Generating PDF...' : 'Download PDF'}</span>
-                  </span>
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span>{exportingMonthly === 'pdf' ? 'Exporting...' : 'PDF'}</span>
                 </button>
 
                 <button
-                  className="btn btn-secondary"
+                  className={`btn btn-secondary ${styles.exportBtn}`}
                   onClick={() => handleExportMonthly('csv')}
                   type="button"
                   disabled={exportingMonthly === 'csv'}
-                  title="Download CSV spreadsheet"
+                  title="Download CSV"
                 >
-                  <span className={styles.btnWithIcon}>
-                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="16" y1="13" x2="8" y2="13" />
-                      <line x1="16" y1="17" x2="8" y2="17" />
-                    </svg>
-                    <span>{exportingMonthly === 'csv' ? 'Generating CSV...' : 'Download CSV'}</span>
-                  </span>
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span>{exportingMonthly === 'csv' ? 'Exporting...' : 'CSV'}</span>
                 </button>
               </div>
             </div>
+          </div>
 
-            {monthlyData && !loadingMonthly && (
+          {monthlyError && (
+            <div className={styles.errorText} role="alert">
+              {monthlyError}
+            </div>
+          )}
+
+          {loadingMonthly ? (
+            <div className={styles.loadingState}>
+              <div className="spinner" style={{ width: 24, height: 24 }} />
+            </div>
+          ) : (
+            monthlyData && (
               <div className={styles.resultSection}>
-                {/* Metric Summary Ribbon for Monthly Activity */}
                 <div className={styles.kpiGrid}>
                   <div className={styles.kpiCard}>
                     <span className={styles.kpiLabel}>Total Visits</span>
@@ -571,32 +599,42 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-6)', marginTop: 'var(--space-6)' }}>
+                <div className={styles.splitTables}>
                   <div>
-                    <h3 className={styles.resultTitle}>
-                      Consultations by Physician ({((monthlyData.perDoctor || monthlyData.byDoctor || []).length)} records)
+                    <h3 className={styles.sectionTitle}>
+                      By Doctor ({(monthlyData.perDoctor || monthlyData.byDoctor || []).length})
                     </h3>
                     <DataTable
                       columns={monthlyDoctorColumns}
                       data={monthlyData.perDoctor || monthlyData.byDoctor || []}
-                      pagination={{ page: 1, limit: 100, total: (monthlyData.perDoctor || monthlyData.byDoctor || []).length, totalPages: 1 }}
+                      pagination={{
+                        page: 1,
+                        limit: 100,
+                        total: (monthlyData.perDoctor || monthlyData.byDoctor || []).length,
+                        totalPages: 1,
+                      }}
                     />
                   </div>
                   <div>
-                    <h3 className={styles.resultTitle}>
-                      Visits by Patient ({((monthlyData.perPatient || monthlyData.byPatient || []).length)} records)
+                    <h3 className={styles.sectionTitle}>
+                      By Patient ({(monthlyData.perPatient || monthlyData.byPatient || []).length})
                     </h3>
                     <DataTable
                       columns={monthlyPatientColumns}
                       data={monthlyData.perPatient || monthlyData.byPatient || []}
-                      pagination={{ page: 1, limit: 100, total: (monthlyData.perPatient || monthlyData.byPatient || []).length, totalPages: 1 }}
+                      pagination={{
+                        page: 1,
+                        limit: 100,
+                        total: (monthlyData.perPatient || monthlyData.byPatient || []).length,
+                        totalPages: 1,
+                      }}
                     />
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-        </>
+            )
+          )}
+        </div>
       )}
     </div>
   );

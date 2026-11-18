@@ -1,18 +1,54 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { patientsApi, medicalRecordsApi } from '../api/client';
-import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
 import toast from 'react-hot-toast';
 import styles from './PatientsPage.module.css';
+
+const formatRecordDate = (rec) => {
+  const scheduled = rec?.appointment?.date_time;
+  if (scheduled) {
+    const d = new Date(scheduled);
+    if (!Number.isNaN(d.getTime())) {
+      const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      return `${dateStr} · ${timeStr}`;
+    }
+  }
+  if (rec?.record_date && /^\d{4}-\d{2}-\d{2}$/.test(rec.record_date)) {
+    const [y, m, day] = rec.record_date.split('-').map(Number);
+    const d = new Date(y, m - 1, day);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+  }
+  const fallback = rec?.createdAt || rec?.created_at;
+  if (fallback) {
+    const d = new Date(fallback);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+  }
+  return '—';
+};
+
+const splitPrescriptionLines = (text) => {
+  if (!text) return [];
+  return String(text)
+    .split(/\n+|;\s*|,\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+};
 
 export default function PatientsPage() {
   const { user } = useAuth();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [sortAsc, setSortAsc] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
+  const [totalCount, setTotalCount] = useState(0);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit'
@@ -24,10 +60,12 @@ export default function PatientsPage() {
   const [recordsPatient, setRecordsPatient] = useState(null);
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
+  const [showAddRecordForm, setShowAddRecordForm] = useState(false);
   const [recordForm, setRecordForm] = useState({ diagnosis: '', prescription: '', notes: '' });
   const [savingRecord, setSavingRecord] = useState(false);
 
-  const canWrite = user?.role === 'admin';
+  const canWrite = user?.role === 'admin' || user?.role === 'receptionist';
+  const canDelete = user?.role === 'admin';
   const canAccessRecords = user?.role === 'admin' || user?.role === 'doctor';
 
   const fetchPatients = useCallback(async () => {
@@ -36,8 +74,12 @@ export default function PatientsPage() {
       const params = { page, limit: 10 };
       if (search) params.search = search;
       const { data } = await patientsApi.list(params);
+      const pag = data.pagination || { page, limit: 10, total: 0, totalPages: 1 };
       setPatients(data.data || []);
-      setPagination(data.pagination || { page, limit: 10, total: 0, totalPages: 1 });
+      setPagination(pag);
+      if (!search) {
+        setTotalCount(pag.total || 0);
+      }
     } catch (err) {
       toast.error(err.message || 'Failed to load patients');
     } finally {
@@ -48,6 +90,15 @@ export default function PatientsPage() {
   useEffect(() => {
     fetchPatients();
   }, [fetchPatients]);
+
+  const sortedPatients = useMemo(() => {
+    return [...patients].sort((a, b) => {
+      const cmp = String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+        sensitivity: 'base',
+      });
+      return sortAsc ? cmp : -cmp;
+    });
+  }, [patients, sortAsc]);
 
   const handleSearch = (e) => {
     setSearch(e.target.value);
@@ -83,6 +134,7 @@ export default function PatientsPage() {
     setRecordsPatient(patient);
     setRecordsModalOpen(true);
     setLoadingRecords(true);
+    setShowAddRecordForm(false);
     setRecordForm({ diagnosis: '', prescription: '', notes: '' });
     try {
       const res = await medicalRecordsApi.list(patient.patient_id);
@@ -109,6 +161,7 @@ export default function PatientsPage() {
       });
       toast.success('Medical record added');
       setRecordForm({ diagnosis: '', prescription: '', notes: '' });
+      setShowAddRecordForm(false);
       const res = await medicalRecordsApi.list(recordsPatient.patient_id);
       setMedicalRecords(res.data.data || []);
     } catch (err) {
@@ -129,7 +182,6 @@ export default function PatientsPage() {
       notes: formData.get('notes')?.trim() || null,
     };
 
-    // Client-side validation
     const errors = {};
     if (!payload.name) errors.name = 'Name is required';
     if (!payload.dob) errors.dob = 'Date of birth is required';
@@ -160,85 +212,24 @@ export default function PatientsPage() {
     }
   };
 
-  const columns = [
-    {
-      key: 'name',
-      label: 'Patient Name',
-      sortable: true,
-      render: (val) => (
-        <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>
-          {val}
-        </span>
-      ),
-    },
-    { key: 'dob', label: 'Date of Birth', sortable: true },
-    { key: 'contact', label: 'Contact', sortable: true },
-    {
-      key: 'patient_id',
-      label: 'Actions',
-      sortable: false,
-      render: (_, row) => (
-        <div className={styles.actionGroup}>
-          {canAccessRecords && (
-            <button
-              className={`${styles.actionBtn} ${styles.actionBtnSecondary}`}
-              onClick={() => handleViewRecords(row)}
-              type="button"
-              title="View & add medical records"
-            >
-              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-              </svg>
-              <span>Records</span>
-            </button>
-          )}
-          <button
-            className={`${styles.actionBtn} ${styles.actionBtnGhost}`}
-            onClick={() => handleEdit(row)}
-            type="button"
-            title="Edit patient profile"
-          >
-            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-            <span>Edit</span>
-          </button>
-          {canWrite && (
-            <button
-              className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-              onClick={() => handleDelete(row)}
-              type="button"
-              title="Delete patient"
-            >
-              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-              <span>Delete</span>
-            </button>
-          )}
-        </div>
-      ),
-    },
-  ];
+  const formatDob = (dob) => {
+    if (!dob) return '—';
+    if (/^\d{4}-\d{2}-\d{2}/.test(dob)) return dob.slice(0, 10);
+    return dob;
+  };
 
   return (
-    <div>
+    <div className={styles.pageContainer}>
       {/* ── Page Header ──────────────────────────────────────────────────── */}
       <div className={styles.pageHeader}>
-        <div>
-          <h1 className={styles.headerTitle}>Patients</h1>
-          <p className={styles.headerSubtitle}>
-            Manage patient records — {user?.role === 'admin' ? 'full administrative CRUD access' : 'clinical directory view'}
-          </p>
-        </div>
+        <h1 className={styles.headerTitle}>Patients</h1>
         {canWrite && (
-          <button className={`btn btn-primary ${styles.headerBtn}`} onClick={handleAdd} type="button">
-            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+          <button
+            className={`btn btn-primary ${styles.headerActionBtn}`}
+            onClick={handleAdd}
+            type="button"
+          >
+            <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
@@ -247,34 +238,179 @@ export default function PatientsPage() {
         )}
       </div>
 
-      {/* ── Search Bar Card ───────────────────────────────────────────────── */}
-      <div className={styles.searchCard}>
-        <div className={styles.searchWrapper}>
-          <svg className={styles.searchIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+      {/* ── Minimal Search & Sort Toolbar ────────────────────────────────── */}
+      <div className={styles.toolbar}>
+        <div className={styles.searchBar}>
+          <svg className={styles.searchIcon} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input
             type="text"
-            className={`form-input ${styles.searchInput}`}
-            placeholder="Search patients by name, contact number, or ID..."
+            aria-label="Search patients"
+            className={styles.searchField}
+            placeholder="Search by name, contact or ID"
             value={search}
             onChange={handleSearch}
           />
+          {search && (
+            <button
+              type="button"
+              className={styles.searchClearBtn}
+              aria-label="Clear search"
+              onClick={() => {
+                setSearch('');
+                setPage(1);
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
+
+        <button
+          type="button"
+          className={styles.sortBtn}
+          onClick={() => setSortAsc((prev) => !prev)}
+          aria-label={sortAsc ? 'Sort Z to A' : 'Sort A to Z'}
+          title={sortAsc ? 'Sort Z–A' : 'Sort A–Z'}
+        >
+          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M7 15l5 5 5-5" />
+            <path d="M7 9l5-5 5 5" />
+          </svg>
+        </button>
       </div>
 
+      {/* ── Minimal Patients List Card ───────────────────────────────────── */}
       {loading ? (
         <div className="flex justify-center items-center" style={{ padding: 'var(--space-12)' }}>
           <div className="spinner" style={{ width: 32, height: 32 }} />
         </div>
+      ) : sortedPatients.length === 0 ? (
+        <div className={styles.emptyCard}>
+          <p className={styles.emptyTitle}>No patients found</p>
+          <p className={styles.emptySubtitle}>Try adjusting your search or add a new patient.</p>
+        </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={patients}
-          pagination={pagination}
-          onPageChange={setPage}
-        />
+        <>
+          <div className={styles.listCard}>
+            <div className={styles.listHeader} role="row">
+              <span className={styles.headerNameCol}>
+                <span>Patient</span>
+                <span className={styles.listCountPill} data-testid="patients-total-count">
+                  {totalCount} {totalCount === 1 ? 'patient' : 'patients'}
+                </span>
+              </span>
+              <span>Contact</span>
+              <span className={styles.headerActionsCol}>Actions</span>
+            </div>
+            {sortedPatients.map((patient) => (
+              <div key={patient.patient_id} className={styles.listRow}>
+                <div className={styles.rowIdentity}>
+                  <span className={styles.rowName}>{patient.name}</span>
+                  <span className={styles.rowSubMeta}>
+                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    <span>{formatDob(patient.dob)}</span>
+                  </span>
+                </div>
+
+                <div className={styles.rowContact}>
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                  <span className={patient.contact ? styles.contactValue : styles.contactMuted}>
+                    {patient.contact || 'Pending update'}
+                  </span>
+                </div>
+
+                <div className={styles.rowActions}>
+                  {canAccessRecords && (
+                    <button
+                      className={`${styles.iconActionBtn} ${styles.iconActionAccent}`}
+                      onClick={() => handleViewRecords(patient)}
+                      type="button"
+                      aria-label="Records"
+                      title="View & add medical records"
+                    >
+                      <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                      </svg>
+                    </button>
+                  )}
+                  {canWrite && (
+                    <button
+                      className={styles.iconActionBtn}
+                      onClick={() => handleEdit(patient)}
+                      type="button"
+                      aria-label="Edit"
+                      title="Edit patient profile"
+                    >
+                      <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      className={`${styles.iconActionBtn} ${styles.iconActionDanger}`}
+                      onClick={() => handleDelete(patient)}
+                      type="button"
+                      aria-label="Delete"
+                      title="Delete patient"
+                    >
+                      <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {pagination.totalPages > 1 && (
+            <div className={styles.paginationBar}>
+              <button
+                type="button"
+                className={styles.pageIconBtn}
+                onClick={() => setPage(page - 1)}
+                disabled={page <= 1}
+                aria-label="Previous page"
+                title="Previous page"
+              >
+                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <span className="pagination-info">
+                {pagination.page || page} / {pagination.totalPages}
+              </span>
+              <button
+                type="button"
+                className={styles.pageIconBtn}
+                onClick={() => setPage(page + 1)}
+                disabled={page >= pagination.totalPages}
+                aria-label="Next page"
+                title="Next page"
+              >
+                <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── Add / Edit Patient Modal ─────────────────────────────────────── */}
@@ -370,94 +506,184 @@ export default function PatientsPage() {
         onClose={() => setRecordsModalOpen(false)}
         size="lg"
       >
-        <div style={{ maxHeight: '65vh', overflowY: 'auto', paddingRight: 'var(--space-2)' }}>
+        <div className={styles.recordsModalBody}>
+          {/* Patient Summary Bar + Toggle Add Entry */}
+          <div className={styles.recordsSummaryBar}>
+            <div className={styles.recordsMetaChips}>
+              {recordsPatient?.dob && (
+                <span className={styles.recordsMetaItem}>
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  <span>DOB: {formatDob(recordsPatient.dob)}</span>
+                </span>
+              )}
+              {recordsPatient?.contact && (
+                <span className={styles.recordsMetaItem}>
+                  <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                  <span>{recordsPatient.contact}</span>
+                </span>
+              )}
+              <span className={styles.recordsCountTag}>
+                {medicalRecords.length} {medicalRecords.length === 1 ? 'entry' : 'entries'}
+              </span>
+            </div>
+
+            {canAccessRecords && (
+              <button
+                type="button"
+                className={showAddRecordForm ? styles.recordToggleBtnGhost : styles.recordToggleBtn}
+                onClick={() => setShowAddRecordForm((prev) => !prev)}
+              >
+                {showAddRecordForm ? (
+                  <span>Close Form</span>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    <span>New Entry</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Collapsible Add Clinical Entry Form */}
+          {canAccessRecords && showAddRecordForm && (
+            <form onSubmit={handleAddRecord} className={styles.addRecordForm}>
+              <div className={styles.addRecordHeader}>Add New Clinical Entry</div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="record-diagnosis">Diagnosis *</label>
+                <input
+                  id="record-diagnosis"
+                  className="form-input"
+                  placeholder="e.g. Acute bronchitis, Hypertension stage 1"
+                  value={recordForm.diagnosis}
+                  onChange={(e) => setRecordForm((prev) => ({ ...prev, diagnosis: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="record-prescription">Prescription</label>
+                <textarea
+                  id="record-prescription"
+                  className="form-input"
+                  rows={2}
+                  placeholder="e.g. Amoxicillin 500mg tid x 7 days"
+                  value={recordForm.prescription}
+                  onChange={(e) => setRecordForm((prev) => ({ ...prev, prescription: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="record-notes">Clinical Notes</label>
+                <textarea
+                  id="record-notes"
+                  className="form-input"
+                  rows={2}
+                  placeholder="Observations or follow-up instructions..."
+                  value={recordForm.notes}
+                  onChange={(e) => setRecordForm((prev) => ({ ...prev, notes: e.target.value }))}
+                />
+              </div>
+              <div className={styles.addRecordActions}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowAddRecordForm(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={savingRecord}>
+                  {savingRecord ? 'Saving...' : 'Save Entry'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Records Timeline List */}
           {loadingRecords ? (
-            <div className="flex justify-center items-center" style={{ padding: 'var(--space-8)' }}>
+            <div className="flex justify-center items-center" style={{ padding: 'var(--space-10)' }}>
               <div className="spinner" style={{ width: 28, height: 28 }} />
             </div>
           ) : medicalRecords.length === 0 ? (
-            <div className="card" style={{ textAlign: 'center', padding: 'var(--space-6)', background: 'var(--color-surface-2)' }}>
-              <p className="text-muted">No medical records recorded for this patient yet.</p>
+            <div className={styles.recordsEmpty}>
+              <p className={styles.recordsEmptyTitle}>No medical records yet</p>
+              <p className={styles.recordsEmptySub}>
+                Completed consultations and manual clinical entries will appear here.
+              </p>
             </div>
           ) : (
             <div className={styles.recordsList}>
-              {medicalRecords.map((rec) => (
-                <div key={rec.record_id} className={styles.recordCard}>
-                  <div className={styles.recordHeader}>
-                    <span className={styles.recordDiagnosis}>
-                      {rec.diagnosis}
-                    </span>
-                    <span className={styles.recordDate}>
-                      {new Date(rec.created_at).toLocaleDateString('en-GB', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted">
-                    Attending Physician: Dr. {rec.doctor?.name || 'Staff Practitioner'}
-                  </div>
-                  {rec.prescription && (
-                    <div>
-                      <span className={styles.recordPrescription}>
-                        Rx: {rec.prescription}
+              {medicalRecords.map((rec) => {
+                const rxLines = splitPrescriptionLines(rec.prescription);
+                return (
+                  <article key={rec.record_id} className={styles.recordItem}>
+                    <div className={styles.recordTopRow}>
+                      <div className={styles.recordTitleBlock}>
+                        <h4 className={styles.recordDiagnosis}>{rec.diagnosis}</h4>
+                        <div className={styles.recordDoctorRow}>
+                          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                          </svg>
+                          <span>{rec.doctor?.name || 'Staff Practitioner'}</span>
+                        </div>
+                      </div>
+                      <span className={styles.recordDateText}>
+                        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                        <span>{formatRecordDate(rec)}</span>
                       </span>
                     </div>
-                  )}
-                  {rec.notes && (
-                    <p className={styles.recordNotes}>{rec.notes}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
 
-          {canAccessRecords && (
-            <div className="card" style={{ marginTop: 'var(--space-4)', background: 'var(--color-surface-2)', padding: 'var(--space-4)' }}>
-              <h4 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 'var(--space-3)', color: 'var(--color-text)' }}>
-                Add New Clinical Entry
-              </h4>
-              <form onSubmit={handleAddRecord}>
-                <div className="form-group" style={{ marginBottom: 'var(--space-3)' }}>
-                  <label className="form-label" htmlFor="record-diagnosis">Diagnosis *</label>
-                  <input
-                    id="record-diagnosis"
-                    className="form-input"
-                    placeholder="e.g. Acute bronchitis, Hypertension stage 1"
-                    value={recordForm.diagnosis}
-                    onChange={(e) => setRecordForm((prev) => ({ ...prev, diagnosis: e.target.value }))}
-                    required
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 'var(--space-3)' }}>
-                  <label className="form-label" htmlFor="record-prescription">Prescription</label>
-                  <textarea
-                    id="record-prescription"
-                    className="form-input"
-                    rows={2}
-                    placeholder="e.g. Amoxicillin 500mg tid x 7 days"
-                    value={recordForm.prescription}
-                    onChange={(e) => setRecordForm((prev) => ({ ...prev, prescription: e.target.value }))}
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 'var(--space-3)' }}>
-                  <label className="form-label" htmlFor="record-notes">Clinical Notes</label>
-                  <textarea
-                    id="record-notes"
-                    className="form-input"
-                    rows={2}
-                    placeholder="Additional clinical observations or follow-up instructions..."
-                    value={recordForm.notes}
-                    onChange={(e) => setRecordForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  />
-                </div>
-                <div className="flex justify-end">
-                  <button type="submit" className="btn btn-primary btn-sm" disabled={savingRecord}>
-                    {savingRecord ? 'Saving...' : 'Add Record'}
-                  </button>
-                </div>
-              </form>
+                    {rxLines.length > 0 && (
+                      <div className={styles.recordDetailRow}>
+                        <svg
+                          className={styles.rxIcon}
+                          viewBox="0 0 24 24"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" />
+                          <line x1="8.5" y1="8.5" x2="15.5" y2="15.5" />
+                        </svg>
+                        <div className={styles.rxLines}>
+                          {rxLines.map((line, idx) => (
+                            <div key={idx} className={styles.rxLine}>{line}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {rec.notes && (
+                      <div className={styles.recordDetailRow}>
+                        <svg
+                          className={styles.notesIcon}
+                          viewBox="0 0 24 24"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                        </svg>
+                        <p className={styles.recordNotes}>{rec.notes}</p>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
         </div>
