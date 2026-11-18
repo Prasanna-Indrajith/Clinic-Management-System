@@ -1,9 +1,10 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { sequelize, Appointment, Patient, Doctor } = require('../models');
+const { sequelize, Appointment, Patient, Doctor, MedicalRecord } = require('../models');
 const logger = require('../config/logger');
 const audit = require('../utils/auditLog');
+const { buildSearchClause } = require('../utils/search');
 
 let bookingMutex = Promise.resolve();
 
@@ -126,6 +127,7 @@ const getAllAppointments = async (req, res) => {
     const offset = (page - 1) * limit;
 
     const { doctor_id, patient_id, status, startDate, endDate, date } = req.query;
+    const search = req.query.search || req.query.q || '';
     const whereClause = {};
 
     // Role-based scoping
@@ -152,13 +154,30 @@ const getAllAppointments = async (req, res) => {
     }
 
     if (status) {
-      whereClause.status = status;
+      const allowedStatuses = ['scheduled', 'completed', 'cancelled'];
+      const statuses = String(status)
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => allowedStatuses.includes(s));
+      if (statuses.length === 1) {
+        whereClause.status = statuses[0];
+      } else if (statuses.length > 1) {
+        whereClause.status = { [Op.in]: statuses };
+      } else {
+        whereClause.status = status;
+      }
     }
 
     // Parameterized date filtering
-    if (date) {
-      const startOfDay = new Date(`${date}T00:00:00.000Z`);
-      const endOfDay = new Date(`${date}T23:59:59.999Z`);
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const [y, m, d] = date.split('-').map(Number);
+      const parsedOffset = Number(req.query.tzOffset);
+      const tzOffsetMinutes =
+        req.query.tzOffset !== undefined && req.query.tzOffset !== '' && Number.isFinite(parsedOffset)
+          ? parsedOffset
+          : 0;
+      const startOfDay = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) + tzOffsetMinutes * 60 * 1000);
+      const endOfDay = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999) + tzOffsetMinutes * 60 * 1000);
       whereClause.date_time = { [Op.between]: [startOfDay, endOfDay] };
     } else if (startDate && endDate) {
       whereClause.date_time = { [Op.between]: [new Date(startDate), new Date(endDate)] };
@@ -168,6 +187,15 @@ const getAllAppointments = async (req, res) => {
       whereClause.date_time = { [Op.lte]: new Date(endDate) };
     }
 
+    const searchClause = buildSearchClause(search, ['$patient.name$', '$doctor.name$']);
+    if (searchClause) {
+      Object.assign(whereClause, searchClause);
+    }
+
+    const allowedSortFields = ['date_time', 'created_at', 'updated_at'];
+    const sortBy = allowedSortFields.includes(req.query.sortBy) ? req.query.sortBy : 'date_time';
+    const sortDir = String(req.query.sortDir || '').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
     const { count, rows } = await Appointment.findAndCountAll({
       where: whereClause,
       include: [
@@ -176,7 +204,7 @@ const getAllAppointments = async (req, res) => {
       ],
       limit,
       offset,
-      order: [['date_time', 'ASC']],
+      order: [[sortBy, sortDir]],
     });
 
     return res.status(200).json({
@@ -232,6 +260,19 @@ const getAppointmentById = async (req, res) => {
 };
 
 /**
+ * Ensure a doctor user can only modify appointments assigned to their profile.
+ */
+async function assertDoctorOwnsAppointment(user, appointment, transaction) {
+  if (!user || user.role !== 'doctor') return;
+  const doctorProfile = await Doctor.findOne({ where: { user_id: user.id }, transaction });
+  if (!doctorProfile || appointment.doctor_id !== doctorProfile.doctor_id) {
+    const error = new Error("Forbidden: You cannot modify another doctor's appointment.");
+    error.status = 403;
+    throw error;
+  }
+}
+
+/**
  * Update appointment (reschedule, update remarks or status)
  */
 const updateAppointment = async (req, res) => {
@@ -247,7 +288,7 @@ const updateAppointment = async (req, res) => {
         throw error;
       }
 
-      // IDOR and privilege check for patient role
+      // IDOR and privilege check for patient and doctor roles
       if (req.user && req.user.role === 'patient') {
         const patientProfile = await Patient.findOne({ where: { user_id: req.user.id }, transaction: t });
         if (!patientProfile || appointment.patient_id !== patientProfile.patient_id) {
@@ -260,6 +301,8 @@ const updateAppointment = async (req, res) => {
           error.status = 403;
           throw error;
         }
+      } else {
+        await assertDoctorOwnsAppointment(req.user, appointment, t);
       }
 
       if (date_time && new Date(date_time).getTime() !== new Date(appointment.date_time).getTime()) {
@@ -281,6 +324,14 @@ const updateAppointment = async (req, res) => {
         }
 
         appointment.date_time = newDateTime;
+      }
+
+      if (status === 'completed' && appointment.status !== 'completed') {
+        const error = new Error(
+          'Appointments can only be finished by the assigned doctor with a clinical entry.'
+        );
+        error.status = 403;
+        throw error;
       }
 
       if (status !== undefined) appointment.status = status;
@@ -312,6 +363,107 @@ const updateAppointment = async (req, res) => {
     }
     logger.error('Error updating appointment', { message: err.message });
     return res.status(500).json({ error: 'Failed to update appointment' });
+  }
+};
+
+/**
+ * Mark appointment as completed and add a clinical entry (Doctor only)
+ */
+const completeAppointment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { diagnosis, prescription, notes, remarks } = req.body || {};
+
+    if (!req.user || req.user.role !== 'doctor') {
+      return res.status(403).json({ error: 'Forbidden: Only doctors can complete appointments.' });
+    }
+
+    const { appointment, medicalRecord } = await sequelize.transaction(async (t) => {
+      const appt = await Appointment.findByPk(id, { transaction: t });
+      if (!appt) {
+        const error = new Error('Appointment not found');
+        error.status = 404;
+        throw error;
+      }
+
+      const doctorProfile = await Doctor.findOne({ where: { user_id: req.user.id }, transaction: t });
+      if (!doctorProfile || appt.doctor_id !== doctorProfile.doctor_id) {
+        const error = new Error("Forbidden: You cannot modify another doctor's appointment.");
+        error.status = 403;
+        throw error;
+      }
+
+      if (appt.status === 'cancelled') {
+        const error = new Error('Cannot complete a cancelled appointment.');
+        error.status = 400;
+        throw error;
+      }
+
+      if (appt.status === 'completed') {
+        const error = new Error('Appointment is already completed.');
+        error.status = 400;
+        throw error;
+      }
+
+      const record = await MedicalRecord.create(
+        {
+          patient_id: appt.patient_id,
+          doctor_id: doctorProfile.doctor_id,
+          appointment_id: appt.appointment_id,
+          diagnosis: diagnosis.trim(),
+          prescription: prescription ? prescription.trim() : null,
+          notes: notes ? notes.trim() : null,
+          record_date: new Date(appt.date_time).toISOString().split('T')[0],
+        },
+        { transaction: t }
+      );
+
+      appt.status = 'completed';
+      if (remarks !== undefined && typeof remarks === 'string' && remarks.trim() !== '') {
+        appt.remarks = remarks.trim();
+      }
+      await appt.save({ transaction: t });
+
+      return { appointment: appt, medicalRecord: record };
+    });
+
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    await audit.log({
+      userId: req.user.id,
+      action: 'CREATE_MEDICAL_RECORD',
+      entity: 'MedicalRecord',
+      entityId: medicalRecord.record_id,
+      ipAddress,
+      details: {
+        patient_id: appointment.patient_id,
+        doctor_id: appointment.doctor_id,
+        appointment_id: appointment.appointment_id,
+      },
+    });
+    await audit.log({
+      userId: req.user.id,
+      action: 'COMPLETE_APPOINTMENT',
+      entity: 'Appointment',
+      entityId: appointment.appointment_id,
+      ipAddress,
+      details: { status: 'completed', record_id: medicalRecord.record_id },
+    });
+
+    logger.info(
+      `Appointment completed: #${appointment.appointment_id} with MedicalRecord #${medicalRecord.record_id}`
+    );
+
+    return res.status(200).json({
+      message: 'Appointment marked as completed and clinical entry saved',
+      data: appointment,
+      medicalRecord,
+    });
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    logger.error('Error completing appointment', { message: err.message });
+    return res.status(500).json({ error: 'Failed to complete appointment' });
   }
 };
 
@@ -365,5 +517,6 @@ module.exports = {
   getAllAppointments,
   getAppointmentById,
   updateAppointment,
+  completeAppointment,
   cancelAppointment,
 };

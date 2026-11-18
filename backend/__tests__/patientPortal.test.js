@@ -129,15 +129,17 @@ describe('Patient Portal & IDOR Scoping (Phase 4 / SRS §3.1)', () => {
         expect(res.status).toBe(403);
     });
 
+    const futureAvailDate = new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0];
+
     it('PORTAL-06: patient can view doctor availability for a target date', async () => {
         const res = await request(app)
-            .get(`/api/doctors/${doctor.doctor_id}/availability?date=2026-11-20`)
+            .get(`/api/doctors/${doctor.doctor_id}/availability?date=${futureAvailDate}`)
             .set('Authorization', `Bearer ${patient1Token}`);
 
         expect(res.status).toBe(200);
         expect(res.body).toHaveProperty('doctor');
         expect(res.body.doctor.doctor_id).toBe(doctor.doctor_id);
-        expect(res.body.date).toBe('2026-11-20');
+        expect(res.body.date).toBe(futureAvailDate);
         expect(Array.isArray(res.body.slots)).toBe(true);
         expect(res.body.slots.length).toBeGreaterThan(0);
         expect(res.body.slots[0]).toHaveProperty('time');
@@ -146,7 +148,7 @@ describe('Patient Portal & IDOR Scoping (Phase 4 / SRS §3.1)', () => {
 
     it('PORTAL-07: doctor availability reflects booked appointments', async () => {
         // Book a specific slot for the doctor
-        const bookedDateTime = '2026-11-20T08:30:00.000Z';
+        const bookedDateTime = `${futureAvailDate}T08:30:00.000Z`;
         await Appointment.create({
             patient_id: patient2.patient_id,
             doctor_id: doctor.doctor_id,
@@ -156,7 +158,7 @@ describe('Patient Portal & IDOR Scoping (Phase 4 / SRS §3.1)', () => {
         });
 
         const res = await request(app)
-            .get(`/api/doctors/${doctor.doctor_id}/availability?date=2026-11-20`)
+            .get(`/api/doctors/${doctor.doctor_id}/availability?date=${futureAvailDate}`)
             .set('Authorization', `Bearer ${patient1Token}`);
 
         expect(res.status).toBe(200);
@@ -194,5 +196,83 @@ describe('Patient Portal & IDOR Scoping (Phase 4 / SRS §3.1)', () => {
 
         expect(res.status).toBe(403);
         expect(res.body.error).toMatch(/forbidden/i);
+    });
+
+    it('PORTAL-10: availability marks past slots for today as unavailable and applies tzOffset', async () => {
+        const tzOffset = -330; // +05:30 local timezone
+        const nowLocal = new Date(Date.now() - tzOffset * 60 * 1000);
+        const todayStr = nowLocal.toISOString().split('T')[0];
+
+        const res = await request(app)
+            .get(`/api/doctors/${doctor.doctor_id}/availability?date=${todayStr}&tzOffset=${tzOffset}`)
+            .set('Authorization', `Bearer ${patient1Token}`);
+
+        expect(res.status).toBe(200);
+        const nowMs = Date.now();
+        res.body.slots.forEach((slot) => {
+            const slotMs = new Date(slot.dateTime).getTime();
+            // Local 08:30 in +05:30 should convert to 03:00Z on that date
+            if (slot.time === '08:30') {
+                expect(slot.dateTime).toBe(`${todayStr}T03:00:00.000Z`);
+            }
+            if (slotMs <= nowMs) {
+                expect(slot.available).toBe(false);
+                if (slot.reason !== 'Booked') {
+                    expect(slot.reason).toBe('Past');
+                }
+            }
+        });
+    });
+
+    it('PORTAL-11: patient cannot call complete endpoint on appointments (403)', async () => {
+        const res = await request(app)
+            .patch(`/api/appointments/${appointment1.appointment_id}/complete`)
+            .set('Authorization', `Bearer ${patient1Token}`);
+
+        expect(res.status).toBe(403);
+    });
+
+    it('PORTAL-12: patient and receptionist can view completed appointment report while other patient is blocked (403)', async () => {
+        const receptionistUser = await User.create({
+            name: 'Front Desk Portal',
+            email: 'reception.portal@clinic.local',
+            password_hash: 'ReceptionPass123!',
+            role: 'receptionist',
+        });
+        const receptionistToken = generateToken(receptionistUser);
+
+        // Doctor finishes appointment1 with a clinical entry
+        await request(app)
+            .patch(`/api/appointments/${appointment1.appointment_id}/complete`)
+            .set('Authorization', `Bearer ${doctorToken}`)
+            .send({
+                diagnosis: 'Seasonal rhinitis',
+                prescription: 'Cetirizine 10mg nocte',
+                notes: 'Follow up in 2 weeks',
+            })
+            .expect(200);
+
+        // Patient1 can view their own completed appointment report
+        const ownRes = await request(app)
+            .get(`/api/medical-records/appointment/${appointment1.appointment_id}`)
+            .set('Authorization', `Bearer ${patient1Token}`)
+            .expect(200);
+
+        expect(ownRes.body.data.appointment.appointment_id).toBe(appointment1.appointment_id);
+        expect(ownRes.body.data.medicalRecord).not.toBeNull();
+        expect(ownRes.body.data.medicalRecord.diagnosis).toBe('Seasonal rhinitis');
+
+        // Patient2 cannot view Patient1's appointment report (403)
+        await request(app)
+            .get(`/api/medical-records/appointment/${appointment1.appointment_id}`)
+            .set('Authorization', `Bearer ${patient2Token}`)
+            .expect(403);
+
+        // Receptionist can view completed appointment report (200)
+        const recRes = await request(app)
+            .get(`/api/medical-records/appointment/${appointment1.appointment_id}`)
+            .set('Authorization', `Bearer ${receptionistToken}`)
+            .expect(200);
+        expect(recRes.body.data.medicalRecord.diagnosis).toBe('Seasonal rhinitis');
     });
 });

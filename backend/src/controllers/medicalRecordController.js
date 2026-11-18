@@ -1,6 +1,7 @@
 'use strict';
 
-const { MedicalRecord, Patient, Doctor } = require('../models');
+const { Op } = require('sequelize');
+const { MedicalRecord, Patient, Doctor, Appointment } = require('../models');
 const logger = require('../config/logger');
 const audit = require('../utils/auditLog');
 
@@ -40,8 +41,9 @@ const getRecordsByPatient = async (req, res) => {
             where: { patient_id: patientId },
             include: [
                 { model: Doctor, as: 'doctor', attributes: ['doctor_id', 'name', 'specialization'] },
+                { model: Appointment, as: 'appointment', attributes: ['appointment_id', 'date_time', 'status', 'remarks'] },
             ],
-            order: [['record_date', 'DESC']],
+            order: [['record_date', 'DESC'], ['record_id', 'DESC']],
         });
 
         return res.status(200).json({ data: records });
@@ -147,7 +149,73 @@ const createRecord = async (req, res) => {
     }
 };
 
+/**
+ * Get the clinical report / medical record for a specific appointment.
+ */
+const getRecordByAppointment = async (req, res) => {
+    try {
+        const { appointmentId } = req.params;
+        const appointment = await Appointment.findByPk(appointmentId, {
+            include: [
+                { model: Patient, as: 'patient', attributes: ['patient_id', 'name', 'contact', 'user_id'] },
+                { model: Doctor, as: 'doctor', attributes: ['doctor_id', 'name', 'specialization'] },
+            ],
+        });
+
+        if (!appointment) {
+            return res.status(404).json({ error: 'Appointment not found' });
+        }
+
+        if (req.user.role === 'patient') {
+            const patientProfile = await Patient.findOne({ where: { user_id: req.user.id } });
+            if (!patientProfile || appointment.patient_id !== patientProfile.patient_id) {
+                return res.status(403).json({ error: "Forbidden: You cannot access another patient's report." });
+            }
+        } else if (req.user.role === 'doctor') {
+            const doctorProfile = await Doctor.findOne({ where: { user_id: req.user.id } });
+            if (!doctorProfile || appointment.doctor_id !== doctorProfile.doctor_id) {
+                return res.status(403).json({ error: "Forbidden: You cannot access another doctor's report." });
+            }
+        } else if (req.user.role !== 'admin' && req.user.role !== 'receptionist') {
+            return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+        }
+
+        let medicalRecord = await MedicalRecord.findOne({
+            where: { appointment_id: appointment.appointment_id },
+            include: [{ model: Doctor, as: 'doctor', attributes: ['doctor_id', 'name', 'specialization'] }],
+        });
+
+        // Fallback for older/seeded records created without appointment_id
+        if (!medicalRecord) {
+            const apptMs = new Date(appointment.date_time).getTime();
+            const candidateDates = [-86400000, 0, 86400000].map((offset) =>
+                new Date(apptMs + offset).toISOString().split('T')[0]
+            );
+            medicalRecord = await MedicalRecord.findOne({
+                where: {
+                    patient_id: appointment.patient_id,
+                    doctor_id: appointment.doctor_id,
+                    record_date: { [Op.in]: candidateDates },
+                },
+                include: [{ model: Doctor, as: 'doctor', attributes: ['doctor_id', 'name', 'specialization'] }],
+                order: [['record_id', 'DESC']],
+            });
+        }
+
+        return res.status(200).json({
+            data: {
+                appointment,
+                medicalRecord,
+            },
+        });
+    } catch (err) {
+        logger.error('Error fetching appointment report', { message: err.message });
+        return res.status(500).json({ error: 'Failed to retrieve appointment report' });
+    }
+};
+
 module.exports = {
     getRecordsByPatient,
+    getRecordByAppointment,
     createRecord,
 };

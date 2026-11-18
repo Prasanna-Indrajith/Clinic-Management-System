@@ -5,7 +5,7 @@ process.env.JWT_SECRET = 'super-secret-test-jwt-key-2026';
 
 const request = require('supertest');
 const app = require('../src/app');
-const { sequelize, User, Patient, Doctor, Appointment } = require('../src/models');
+const { sequelize, User, Patient, Doctor, Appointment, MedicalRecord } = require('../src/models');
 const { generateToken } = require('../src/utils/token');
 
 beforeAll(async () => {
@@ -231,6 +231,155 @@ describe('Phase 2 â€” Appointment Management & Race Condition (02_TEST_PLAN.md Â
         .expect(200);
 
       expect(res.body.data.every((apt) => apt.doctor_id === doctorRecord.doctor_id)).toBe(true);
+    });
+  });
+
+  describe('APT-07: Completing Appointments (Doctor Only with Clinical Entry)', () => {
+    it('allows assigned doctor to finish a scheduled appointment with diagnosis and blocks receptionist/admin/other doctor', async () => {
+      const doctorUser = await User.create({
+        name: 'Dr. Strange User',
+        email: 'strange.user@clinic.local',
+        password_hash: 'DoctorPass123!',
+        role: 'doctor',
+      });
+      await doctorRecord.update({ user_id: doctorUser.user_id });
+      const doctorToken = generateToken(doctorUser);
+
+      const receptionistUser = await User.create({
+        name: 'Front Desk User',
+        email: 'reception.apt@clinic.local',
+        password_hash: 'ReceptionPass123!',
+        role: 'receptionist',
+      });
+      const receptionistToken = generateToken(receptionistUser);
+
+      const otherDoctorUser = await User.create({
+        name: 'Dr. Other',
+        email: 'other.doc@clinic.local',
+        password_hash: 'DoctorPass123!',
+        role: 'doctor',
+      });
+      await Doctor.create({
+        user_id: otherDoctorUser.user_id,
+        name: 'Dr. Other',
+        specialization: 'General',
+        contact: '555-9999',
+        email: 'other.doc@clinic.local',
+      });
+      const otherDoctorToken = generateToken(otherDoctorUser);
+
+      const apt1Res = await request(app)
+        .post('/api/appointments')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          patient_id: patientRecord1.patient_id,
+          doctor_id: doctorRecord.doctor_id,
+          date_time: '2026-10-18T09:30:00.000Z',
+        })
+        .expect(201);
+
+      // Receptionist and Admin cannot complete appointments
+      await request(app)
+        .patch(`/api/appointments/${apt1Res.body.data.appointment_id}/complete`)
+        .set('Authorization', `Bearer ${receptionistToken}`)
+        .send({ diagnosis: 'Viral fever' })
+        .expect(403);
+
+      await request(app)
+        .patch(`/api/appointments/${apt1Res.body.data.appointment_id}/complete`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ diagnosis: 'Viral fever' })
+        .expect(403);
+
+      // Receptionist cannot bypass via PUT /api/appointments/:id status='completed'
+      await request(app)
+        .put(`/api/appointments/${apt1Res.body.data.appointment_id}`)
+        .set('Authorization', `Bearer ${receptionistToken}`)
+        .send({ status: 'completed' })
+        .expect(403);
+
+      // Another doctor cannot complete Dr. Strange's appointment
+      await request(app)
+        .patch(`/api/appointments/${apt1Res.body.data.appointment_id}/complete`)
+        .set('Authorization', `Bearer ${otherDoctorToken}`)
+        .send({ diagnosis: 'Viral fever' })
+        .expect(403);
+
+      // Missing diagnosis is rejected (400)
+      await request(app)
+        .patch(`/api/appointments/${apt1Res.body.data.appointment_id}/complete`)
+        .set('Authorization', `Bearer ${doctorToken}`)
+        .send({ prescription: 'Paracetamol' })
+        .expect(400);
+
+      // Assigned doctor completes appointment with clinical entry
+      const docCompleteRes = await request(app)
+        .patch(`/api/appointments/${apt1Res.body.data.appointment_id}/complete`)
+        .set('Authorization', `Bearer ${doctorToken}`)
+        .send({
+          diagnosis: 'Acute viral upper respiratory infection',
+          prescription: 'Paracetamol 500mg tds x 3 days',
+          notes: 'Hydration and rest advised',
+        })
+        .expect(200);
+
+      expect(docCompleteRes.body.data.status).toBe('completed');
+      expect(docCompleteRes.body.medicalRecord).toBeDefined();
+      expect(docCompleteRes.body.medicalRecord.diagnosis).toBe('Acute viral upper respiratory infection');
+      expect(docCompleteRes.body.medicalRecord.patient_id).toBe(patientRecord1.patient_id);
+      expect(docCompleteRes.body.medicalRecord.doctor_id).toBe(doctorRecord.doctor_id);
+
+      const savedRecord = await MedicalRecord.findByPk(docCompleteRes.body.medicalRecord.record_id);
+      expect(savedRecord).not.toBeNull();
+      expect(savedRecord.prescription).toBe('Paracetamol 500mg tds x 3 days');
+    });
+
+    it('rejects completing a cancelled appointment (400)', async () => {
+      const doctorUser = await User.findOne({ where: { email: 'strange.user@clinic.local' } });
+      const doctorToken = generateToken(doctorUser);
+
+      const aptRes = await request(app)
+        .post('/api/appointments')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          patient_id: patientRecord1.patient_id,
+          doctor_id: doctorRecord.doctor_id,
+          date_time: '2026-10-19T14:00:00.000Z',
+        })
+        .expect(201);
+
+      await request(app)
+        .patch(`/api/appointments/${aptRes.body.data.appointment_id}/cancel`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const res = await request(app)
+        .patch(`/api/appointments/${aptRes.body.data.appointment_id}/complete`)
+        .set('Authorization', `Bearer ${doctorToken}`)
+        .send({ diagnosis: 'Cancelled visit' })
+        .expect(400);
+
+      expect(res.body.error).toMatch(/cancelled/i);
+    });
+  });
+
+  describe('APT-08: Appointment Search by Patient or Doctor Name', () => {
+    it('filters appointments case-insensitively by patient name or doctor name', async () => {
+      const patRes = await request(app)
+        .get('/api/appointments?search=wonder')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(patRes.body.data.length).toBeGreaterThan(0);
+      expect(patRes.body.data.every((apt) => apt.patient.name.toLowerCase().includes('wonder'))).toBe(true);
+
+      const docRes = await request(app)
+        .get('/api/appointments?search=strange')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(docRes.body.data.length).toBeGreaterThan(0);
+      expect(docRes.body.data.every((apt) => apt.doctor.name.toLowerCase().includes('strange'))).toBe(true);
     });
   });
 });

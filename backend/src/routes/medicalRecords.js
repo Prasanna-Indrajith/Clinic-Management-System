@@ -30,6 +30,28 @@ router.use(authMiddleware);
 
 /**
  * @openapi
+ * /api/medical-records/appointment/{appointmentId}:
+ *   get:
+ *     summary: Get clinical report for a specific appointment
+ *     tags: [MedicalRecords]
+ *     parameters:
+ *       - in: path
+ *         name: appointmentId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Appointment consultation report
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Appointment not found
+ */
+router.get('/appointment/:appointmentId', medicalRecordController.getRecordByAppointment);
+
+/**
+ * @openapi
  * /api/medical-records/{patientId}:
  *   get:
  *     summary: List medical records for a patient

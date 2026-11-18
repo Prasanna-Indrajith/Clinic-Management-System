@@ -1,10 +1,12 @@
 'use strict';
 
 const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 
 /**
- * Build a safe, parameterized SQL LIKE search clause.
- * Sanitizes input and wraps with Sequelize Op.like.
+ * Build a safe, parameterized, case-insensitive SQL search clause.
+ * Splits multi-word queries into tokens so first name, last name, or both
+ * match regardless of case or word order. Uses Op.iLike on PostgreSQL.
  *
  * @param {string} searchTerm
  * @param {string[]} fields
@@ -15,12 +17,25 @@ const buildSearchClause = (searchTerm, fields) => {
     return null;
   }
 
-  const sanitized = searchTerm.trim();
-  const conditions = fields.map((field) => ({
-    [field]: { [Op.like]: `%${sanitized}%` },
-  }));
+  const isPostgres = sequelize.getDialect() === 'postgres';
+  const likeOp = isPostgres ? Op.iLike : Op.like;
+  const tokens = searchTerm.trim().split(/\s+/).filter(Boolean);
 
-  return { [Op.or]: conditions };
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  const tokenClauses = tokens.map((token) => {
+    const escaped = isPostgres ? token.replace(/[\\%_]/g, '\\$&') : token;
+    const pattern = `%${escaped}%`;
+    return {
+      [Op.or]: fields.map((field) => ({
+        [field]: { [likeOp]: pattern },
+      })),
+    };
+  });
+
+  return tokenClauses.length === 1 ? tokenClauses[0] : { [Op.and]: tokenClauses };
 };
 
 /**

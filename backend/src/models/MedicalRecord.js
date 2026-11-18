@@ -32,6 +32,16 @@ MedicalRecord.init(
       onUpdate: 'CASCADE',
       onDelete: 'RESTRICT',
     },
+    appointment_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'appointments',
+        key: 'appointment_id',
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'SET NULL',
+    },
     diagnosis: {
       type: DataTypes.TEXT,
       allowNull: false,

@@ -48,7 +48,16 @@ const updateAppointmentValidation = [
   validate,
 ];
 
+const completeAppointmentValidation = [
+  body('diagnosis').trim().notEmpty().withMessage('Diagnosis is required to finish an appointment'),
+  body('prescription').optional({ nullable: true }).trim(),
+  body('notes').optional({ nullable: true }).trim(),
+  body('remarks').optional({ nullable: true }).trim(),
+  validate,
+];
+
 module.exports = {
   createAppointmentValidation,
   updateAppointmentValidation,
+  completeAppointmentValidation,
 };

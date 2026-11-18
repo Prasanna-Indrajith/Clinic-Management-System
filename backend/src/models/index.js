@@ -27,6 +27,9 @@ MedicalRecord.belongsTo(Patient, { foreignKey: 'patient_id', as: 'patient' });
 Doctor.hasMany(MedicalRecord, { foreignKey: 'doctor_id', as: 'medicalRecords' });
 MedicalRecord.belongsTo(Doctor, { foreignKey: 'doctor_id', as: 'doctor' });
 
+Appointment.hasOne(MedicalRecord, { foreignKey: 'appointment_id', as: 'medicalRecord' });
+MedicalRecord.belongsTo(Appointment, { foreignKey: 'appointment_id', as: 'appointment' });
+
 User.hasMany(AuditLog, { foreignKey: 'user_id', as: 'auditLogs' });
 AuditLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 

@@ -4,9 +4,11 @@ const express = require('express');
 const router = express.Router();
 const appointmentController = require('../controllers/appointmentController');
 const authMiddleware = require('../middleware/authMiddleware');
+const { requireRole } = require('../middleware/roleMiddleware');
 const {
   createAppointmentValidation,
   updateAppointmentValidation,
+  completeAppointmentValidation,
 } = require('../validators/appointmentValidator');
 
 // All appointment endpoints require authentication
@@ -127,6 +129,49 @@ router.post('/', createAppointmentValidation, appointmentController.createAppoin
  *         description: Conflict - doctor already booked at new time
  */
 router.put('/:id', updateAppointmentValidation, appointmentController.updateAppointment);
+
+/**
+ * @openapi
+ * /api/appointments/{id}/complete:
+ *   patch:
+ *     summary: Mark appointment as completed with a clinical entry (Doctor only)
+ *     tags: [Appointments]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [diagnosis]
+ *             properties:
+ *               diagnosis:
+ *                 type: string
+ *               prescription:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *               remarks:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Appointment marked as completed and clinical entry saved
+ *       400:
+ *         description: Validation failed or appointment cannot be completed
+ *       403:
+ *         description: Forbidden - doctor only
+ */
+router.patch(
+  '/:id/complete',
+  requireRole(['doctor']),
+  completeAppointmentValidation,
+  appointmentController.completeAppointment
+);
 
 /**
  * @openapi

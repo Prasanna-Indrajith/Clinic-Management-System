@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Doctor, Appointment } = require('../models');
+const { sequelize, Doctor, Appointment, User } = require('../models');
 const logger = require('../config/logger');
 
 const { buildSearchClause, getPagination } = require('../utils/search');
@@ -70,18 +70,51 @@ const getDoctorById = async (req, res) => {
 const audit = require('../utils/auditLog');
 
 /**
- * Create new doctor (Admin only)
+ * Create new doctor (Admin or Receptionist)
+ * Optionally creates a linked User account (role: 'doctor') if password is provided.
  */
 const createDoctor = async (req, res) => {
   try {
-    const { name, specialization, contact, email, user_id } = req.body;
+    const { name, specialization, contact, email, user_id, password } = req.body;
 
-    const doctor = await Doctor.create({
-      name,
-      specialization,
-      contact,
-      email,
-      user_id: user_id || null,
+    const existingDoctor = await Doctor.findOne({ where: { email } });
+    if (existingDoctor) {
+      return res.status(409).json({ error: 'A doctor with this email already exists' });
+    }
+
+    const doctor = await sequelize.transaction(async (t) => {
+      let effectiveUserId = user_id || null;
+
+      if (password && !effectiveUserId) {
+        const existingUser = await User.findOne({ where: { email }, transaction: t });
+        if (existingUser) {
+          const err = new Error('Email already registered');
+          err.status = 409;
+          throw err;
+        }
+
+        const createdUser = await User.create(
+          {
+            name,
+            email,
+            password_hash: password,
+            role: 'doctor',
+          },
+          { transaction: t }
+        );
+        effectiveUserId = createdUser.user_id;
+      }
+
+      return Doctor.create(
+        {
+          name,
+          specialization,
+          contact,
+          email,
+          user_id: effectiveUserId,
+        },
+        { transaction: t }
+      );
     });
 
     const ipAddress = req.ip || req.socket.remoteAddress;
@@ -91,7 +124,11 @@ const createDoctor = async (req, res) => {
       entity: 'Doctor',
       entityId: doctor.doctor_id,
       ipAddress,
-      details: { name: doctor.name, specialization: doctor.specialization },
+      details: {
+        name: doctor.name,
+        specialization: doctor.specialization,
+        withUserAccount: Boolean(doctor.user_id),
+      },
     });
 
     logger.info(`Doctor created: ${doctor.name} (ID: ${doctor.doctor_id})`);
@@ -101,6 +138,9 @@ const createDoctor = async (req, res) => {
       data: doctor,
     });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
     logger.error('Error creating doctor', { message: err.message });
     return res.status(500).json({ error: 'Failed to create doctor' });
   }
@@ -197,7 +237,16 @@ const getDoctorAvailability = async (req, res) => {
       return res.status(404).json({ error: 'Doctor not found' });
     }
 
-    const targetDate = req.query.date || new Date().toISOString().split('T')[0];
+    const tzOffsetRaw = req.query.tzOffset;
+    const parsedOffset = Number(tzOffsetRaw);
+    const tzOffsetMinutes =
+      tzOffsetRaw !== undefined && tzOffsetRaw !== '' && Number.isFinite(parsedOffset)
+        ? parsedOffset
+        : 0;
+
+    const nowMs = Date.now();
+    const defaultLocalDate = new Date(nowMs - tzOffsetMinutes * 60 * 1000).toISOString().split('T')[0];
+    const targetDate = req.query.date || defaultLocalDate;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
@@ -233,19 +282,26 @@ const getDoctorAvailability = async (req, res) => {
     });
 
     const slots = slotDefinitions.map((def) => {
-      const slotUtc = new Date(Date.UTC(year, month - 1, day, def.hour, def.minute, 0, 0));
+      const slotTimestamp =
+        Date.UTC(year, month - 1, day, def.hour, def.minute, 0, 0) + tzOffsetMinutes * 60 * 1000;
+      const slotDate = new Date(slotTimestamp);
+      const isPast = slotDate.getTime() <= nowMs;
+
       // Match if existing appointment is within 25 minutes of slot timestamp
       const isBooked = existingAppointments.some((apt) => {
         const aptDate = new Date(apt.date_time);
-        const diffMs = Math.abs(aptDate.getTime() - slotUtc.getTime());
+        const diffMs = Math.abs(aptDate.getTime() - slotDate.getTime());
         return diffMs < 25 * 60 * 1000;
       });
 
+      const available = !isBooked && !isPast;
+      const reason = isBooked ? 'Booked' : isPast ? 'Past' : 'Available';
+
       return {
         time: def.time,
-        dateTime: slotUtc.toISOString(),
-        available: !isBooked,
-        reason: isBooked ? 'Booked' : 'Available',
+        dateTime: slotDate.toISOString(),
+        available,
+        reason,
       };
     });
 
